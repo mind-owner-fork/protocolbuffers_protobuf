@@ -93,7 +93,7 @@ void SetCommonFieldVariables(const FieldDescriptor* descriptor,
     field_flags.push_back("GPBFieldHasEnumDescriptor");
   }
 
-  (*variables)["fieldflags"] = BuildFlagsString(field_flags);
+  (*variables)["fieldflags"] = BuildFlagsString(FLAGTYPE_FIELD, field_flags);
 
   (*variables)["default"] = DefaultValue(descriptor);
   (*variables)["default_name"] = GPBGenericValueFieldName(descriptor);
@@ -228,8 +228,8 @@ int FieldGenerator::ExtraRuntimeHasBitsNeeded(void) const {
 void FieldGenerator::SetExtraRuntimeHasBitsBase(int index_base) {
   // NOTE: src/google/protobuf/compiler/plugin.cc makes use of cerr for some
   // error cases, so it seems to be ok to use as a back door for errors.
-  cerr << "Error: should have overridden SetExtraRuntimeHasBitsBase()." << endl;
-  cerr.flush();
+  std::cerr << "Error: should have overridden SetExtraRuntimeHasBitsBase()." << std::endl;
+  std::cerr.flush();
   abort();
 }
 

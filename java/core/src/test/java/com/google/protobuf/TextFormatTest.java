@@ -30,9 +30,12 @@
 
 package com.google.protobuf;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.TextFormat.Parser.SingularOverwritePolicy;
+import map_test.MapTestProto.TestMap;
 import protobuf_unittest.UnittestMset.TestMessageSetExtension1;
 import protobuf_unittest.UnittestMset.TestMessageSetExtension2;
 import protobuf_unittest.UnittestProto.OneString;
@@ -42,11 +45,9 @@ import protobuf_unittest.UnittestProto.TestAllTypes.NestedMessage;
 import protobuf_unittest.UnittestProto.TestEmptyMessage;
 import protobuf_unittest.UnittestProto.TestOneof2;
 import proto2_wireformat_unittest.UnittestMsetWireFormat.TestMessageSet;
-
-import junit.framework.TestCase;
-
 import java.io.StringReader;
 import java.util.List;
+import junit.framework.TestCase;
 
 /**
  * Test case for {@link TextFormat}.
@@ -942,6 +943,7 @@ public class TextFormatTest extends TestCase {
   }
 
 
+  // See additional coverage in testOneofOverwriteForbidden and testMapOverwriteForbidden.
   public void testParseNonRepeatedFields() throws Exception {
     assertParseSuccessWithOverwriteForbidden(
         "repeated_int32: 1\n" +
@@ -952,6 +954,7 @@ public class TextFormatTest extends TestCase {
     assertParseSuccessWithOverwriteForbidden(
         "repeated_nested_message { bb: 1 }\n" +
         "repeated_nested_message { bb: 2 }\n");
+
     assertParseErrorWithOverwriteForbidden(
         "3:17: Non-repeated field " +
         "\"protobuf_unittest.TestAllTypes.optional_int32\" " +
@@ -990,12 +993,40 @@ public class TextFormatTest extends TestCase {
     assertParseSuccessWithOverwriteForbidden("repeated_int32: [ 1, 2 ]\n");
     assertParseSuccessWithOverwriteForbidden("RepeatedGroup [{ a: 1 },{ a: 2 }]\n");
     assertParseSuccessWithOverwriteForbidden("repeated_nested_message [{ bb: 1 }, { bb: 2 }]\n");
+    // See also testMapShortForm.
+  }
+
+  public void testParseShortRepeatedFormOfEmptyRepeatedFields() throws Exception {
+    assertParseSuccessWithOverwriteForbidden("repeated_foreign_enum: []");
+    assertParseSuccessWithOverwriteForbidden("repeated_int32: []\n");
+    assertParseSuccessWithOverwriteForbidden("RepeatedGroup []\n");
+    assertParseSuccessWithOverwriteForbidden("repeated_nested_message []\n");
+    // See also testMapShortFormEmpty.
+  }
+
+  public void testParseShortRepeatedFormWithTrailingComma() throws Exception {
+    assertParseErrorWithOverwriteForbidden(
+        "1:38: Expected identifier. Found \']\'",
+        "repeated_foreign_enum: [FOREIGN_FOO, ]\n");
+    assertParseErrorWithOverwriteForbidden(
+        "1:22: Couldn't parse integer: For input string: \"]\"",
+        "repeated_int32: [ 1, ]\n");
+    assertParseErrorWithOverwriteForbidden(
+        "1:25: Expected \"{\".",
+        "RepeatedGroup [{ a: 1 },]\n");
+    assertParseErrorWithOverwriteForbidden(
+        "1:37: Expected \"{\".",
+        "repeated_nested_message [{ bb: 1 }, ]\n");
+    // See also testMapShortFormTrailingComma.
   }
 
   public void testParseShortRepeatedFormOfNonRepeatedFields() throws Exception {
     assertParseErrorWithOverwriteForbidden(
         "1:17: Couldn't parse integer: For input string: \"[\"",
         "optional_int32: [1]\n");
+    assertParseErrorWithOverwriteForbidden(
+        "1:17: Couldn't parse integer: For input string: \"[\"",
+        "optional_int32: []\n");
   }
 
   // =======================================================================
@@ -1032,6 +1063,90 @@ public class TextFormatTest extends TestCase {
     TestOneof2 oneof = builder.build();
     assertFalse(oneof.hasFooString());
     assertTrue(oneof.hasFooInt());
+  }
+
+  // =======================================================================
+  // test map
+
+  public void testMapTextFormat() throws Exception {
+    TestMap message =
+        TestMap.newBuilder()
+            .putInt32ToStringField(10, "apple")
+            .putInt32ToStringField(20, "banana")
+            .putInt32ToStringField(30, "cherry")
+            .build();
+    String text = TextFormat.printToUnicodeString(message);
+    {
+      TestMap.Builder dest = TestMap.newBuilder();
+      TextFormat.merge(text, dest);
+      assertThat(dest.build()).isEqualTo(message);
+    }
+    {
+      TestMap.Builder dest = TestMap.newBuilder();
+      parserWithOverwriteForbidden.merge(text, dest);
+      assertThat(dest.build()).isEqualTo(message);
+    }
+  }
+
+  public void testMapShortForm() throws Exception {
+    String text =
+        "string_to_int32_field [{ key: 'x' value: 10 }, { key: 'y' value: 20 }]\n"
+        + "int32_to_message_field "
+        + "[{ key: 1 value { value: 100 } }, { key: 2 value: { value: 200 } }]\n";
+    TestMap.Builder dest = TestMap.newBuilder();
+    parserWithOverwriteForbidden.merge(text, dest);
+    TestMap message = dest.build();
+    assertThat(message.getStringToInt32Field().size()).isEqualTo(2);
+    assertThat(message.getInt32ToMessageField().size()).isEqualTo(2);
+    assertThat(message.getStringToInt32Field().get("x")).isEqualTo(10);
+    assertThat(message.getInt32ToMessageField().get(2).getValue()).isEqualTo(200);
+  }
+
+  public void testMapShortFormEmpty() throws Exception {
+    String text = "string_to_int32_field []\n"
+        + "int32_to_message_field: []\n";
+    TestMap.Builder dest = TestMap.newBuilder();
+    parserWithOverwriteForbidden.merge(text, dest);
+    TestMap message = dest.build();
+    assertThat(message.getStringToInt32Field().size()).isEqualTo(0);
+    assertThat(message.getInt32ToMessageField().size()).isEqualTo(0);
+  }
+
+  public void testMapShortFormTrailingComma() throws Exception {
+    String text = "string_to_int32_field [{ key: 'x' value: 10 }, ]\n";
+    TestMap.Builder dest = TestMap.newBuilder();
+    try {
+      parserWithOverwriteForbidden.merge(text, dest);
+      fail("Expected parse exception.");
+    } catch (TextFormat.ParseException e) {
+      assertThat(e).hasMessageThat().isEqualTo("1:48: Expected \"{\".");
+    }
+  }
+
+  public void testMapOverwrite() throws Exception {
+    String text =
+        "int32_to_int32_field { key: 1 value: 10 }\n"
+            + "int32_to_int32_field { key: 2 value: 20 }\n"
+            + "int32_to_int32_field { key: 1 value: 30 }\n";
+
+    {
+      // With default parser, last value set for the key holds.
+      TestMap.Builder builder = TestMap.newBuilder();
+      defaultParser.merge(text, builder);
+      TestMap map = builder.build();
+      assertThat(map.getInt32ToInt32Field().size()).isEqualTo(2);
+      assertThat(map.getInt32ToInt32Field().get(1).intValue()).isEqualTo(30);
+    }
+
+    {
+      // With overwrite forbidden, same behavior.
+      // TODO(b/29122459): Expect parse exception here.
+      TestMap.Builder builder = TestMap.newBuilder();
+      defaultParser.merge(text, builder);
+      TestMap map = builder.build();
+      assertThat(map.getInt32ToInt32Field().size()).isEqualTo(2);
+      assertThat(map.getInt32ToInt32Field().get(1).intValue()).isEqualTo(30);
+    }
   }
 
   // =======================================================================

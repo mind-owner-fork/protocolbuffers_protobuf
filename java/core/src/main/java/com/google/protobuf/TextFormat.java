@@ -1442,7 +1442,7 @@ public final class TextFormat {
 
     /**
      * Parse a single field from {@code tokenizer} and merge it into
-     * {@code builder}.
+     * {@code target}.
      */
     private void mergeField(final Tokenizer tokenizer,
                             final ExtensionRegistry extensionRegistry,
@@ -1576,14 +1576,22 @@ public final class TextFormat {
       // Support specifying repeated field values as a comma-separated list.
       // Ex."foo: [1, 2, 3]"
       if (field.isRepeated() && tokenizer.tryConsume("[")) {
-        while (true) {
-          consumeFieldValue(tokenizer, extensionRegistry, target, field, extension,
-              parseTreeBuilder, unknownFields);
-          if (tokenizer.tryConsume("]")) {
-            // End of list.
-            break;
+        if (!tokenizer.tryConsume("]")) {  // Allow "foo: []" to be treated as empty.
+          while (true) {
+            consumeFieldValue(
+                tokenizer,
+                extensionRegistry,
+                target,
+                field,
+                extension,
+                parseTreeBuilder,
+                unknownFields);
+            if (tokenizer.tryConsume("]")) {
+              // End of list.
+              break;
+            }
+            tokenizer.consume(",");
           }
-          tokenizer.consume(",");
         }
       } else {
         consumeFieldValue(tokenizer, extensionRegistry, target, field,
@@ -1704,6 +1712,8 @@ public final class TextFormat {
       }
 
       if (field.isRepeated()) {
+        // TODO(b/29122459): If field.isMapField() and FORBID_SINGULAR_OVERWRITES mode,
+        //     check for duplicate map keys here.
         target.addRepeatedField(field, value);
       } else if ((singularOverwritePolicy
               == SingularOverwritePolicy.FORBID_SINGULAR_OVERWRITES)

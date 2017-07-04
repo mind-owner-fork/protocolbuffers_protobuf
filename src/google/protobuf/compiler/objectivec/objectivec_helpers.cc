@@ -196,7 +196,7 @@ const char* const kReservedWordList[] = {
     // method declared in protos. The main cases are methods
     // that take no arguments, or setFoo:/hasFoo: type methods.
     "clear", "data", "delimitedData", "descriptor", "extensionRegistry",
-    "extensionsCurrentlySet", "isInitialized", "serializedSize",
+    "extensionsCurrentlySet", "initialized", "isInitialized", "serializedSize",
     "sortedExtensionsInUse", "unknownFields",
 
     // MacTypes.h names
@@ -210,10 +210,14 @@ const char* const kReservedWordList[] = {
 hash_set<string> kReservedWords =
     MakeWordsMap(kReservedWordList, GOOGLE_ARRAYSIZE(kReservedWordList));
 
-string SanitizeNameForObjC(const string& input, const string& extension) {
+string SanitizeNameForObjC(const string& input,
+                           const string& extension,
+                           string* out_suffix_added) {
   if (kReservedWords.count(input) > 0) {
+    if (out_suffix_added) *out_suffix_added = extension;
     return input + extension;
   }
+  if (out_suffix_added) out_suffix_added->clear();
   return input;
 }
 
@@ -262,6 +266,34 @@ bool IsSpecialName(const string& name, const string* special_names,
   return false;
 }
 
+string GetZeroEnumNameForFlagType(const FlagType flag_type) {
+  switch(flag_type) {
+    case FLAGTYPE_DESCRIPTOR_INITIALIZATION:
+      return "GPBDescriptorInitializationFlag_None";
+    case FLAGTYPE_EXTENSION:
+      return "GPBExtensionNone";
+    case FLAGTYPE_FIELD:
+      return "GPBFieldNone";
+    default:
+      GOOGLE_LOG(FATAL) << "Can't get here.";
+      return "0";
+  }
+}
+
+string GetEnumNameForFlagType(const FlagType flag_type) {
+  switch(flag_type) {
+    case FLAGTYPE_DESCRIPTOR_INITIALIZATION:
+      return "GPBDescriptorInitializationFlags";
+    case FLAGTYPE_EXTENSION:
+      return "GPBExtensionOptions";
+    case FLAGTYPE_FIELD:
+      return "GPBFieldFlags";
+    default:
+      GOOGLE_LOG(FATAL) << "Can't get here.";
+      return string();
+  }
+}
+
 }  // namespace
 
 // Escape C++ trigraphs by escaping question marks to \?
@@ -308,6 +340,12 @@ string BaseFileName(const FileDescriptor* file) {
   return basename;
 }
 
+string FileClassPrefix(const FileDescriptor* file) {
+  // Default is empty string, no need to check has_objc_class_prefix.
+  string result = file->options().objc_class_prefix();
+  return result;
+}
+
 string FilePath(const FileDescriptor* file) {
   string output;
   string basename;
@@ -338,19 +376,13 @@ string FilePathBasename(const FileDescriptor* file) {
   return output;
 }
 
-string FileClassPrefix(const FileDescriptor* file) {
-  // Default is empty string, no need to check has_objc_class_prefix.
-  string result = file->options().objc_class_prefix();
-  return result;
-}
-
 string FileClassName(const FileDescriptor* file) {
   string name = FileClassPrefix(file);
   name += UnderscoresToCamelCase(StripProto(BaseFileName(file)), true);
   name += "Root";
   // There aren't really any reserved words that end in "Root", but playing
   // it safe and checking.
-  return SanitizeNameForObjC(name, "_RootClass");
+  return SanitizeNameForObjC(name, "_RootClass", NULL);
 }
 
 string ClassNameWorker(const Descriptor* descriptor) {
@@ -372,11 +404,15 @@ string ClassNameWorker(const EnumDescriptor* descriptor) {
 }
 
 string ClassName(const Descriptor* descriptor) {
+  return ClassName(descriptor, NULL);
+}
+
+string ClassName(const Descriptor* descriptor, string* out_suffix_added) {
   // 1. Message names are used as is (style calls for CamelCase, trust it).
   // 2. Check for reserved word at the very end and then suffix things.
   string prefix = FileClassPrefix(descriptor->file());
   string name = ClassNameWorker(descriptor);
-  return SanitizeNameForObjC(prefix + name, "_Class");
+  return SanitizeNameForObjC(prefix + name, "_Class", out_suffix_added);
 }
 
 string EnumName(const EnumDescriptor* descriptor) {
@@ -390,7 +426,7 @@ string EnumName(const EnumDescriptor* descriptor) {
   //    yields Fixed_Class, Fixed_Size.
   string name = FileClassPrefix(descriptor->file());
   name += ClassNameWorker(descriptor);
-  return SanitizeNameForObjC(name, "_Enum");
+  return SanitizeNameForObjC(name, "_Enum", NULL);
 }
 
 string EnumValueName(const EnumValueDescriptor* descriptor) {
@@ -405,7 +441,7 @@ string EnumValueName(const EnumValueDescriptor* descriptor) {
   const string& name = class_name + "_" + value_str;
   // There aren't really any reserved words with an underscore and a leading
   // capital letter, but playing it safe and checking.
-  return SanitizeNameForObjC(name, "_Value");
+  return SanitizeNameForObjC(name, "_Value", NULL);
 }
 
 string EnumValueShortName(const EnumValueDescriptor* descriptor) {
@@ -442,7 +478,7 @@ string UnCamelCaseEnumShortName(const string& name) {
 string ExtensionMethodName(const FieldDescriptor* descriptor) {
   const string& name = NameFromFieldDescriptor(descriptor);
   const string& result = UnderscoresToCamelCase(name, false);
-  return SanitizeNameForObjC(result, "_Extension");
+  return SanitizeNameForObjC(result, "_Extension", NULL);
 }
 
 string FieldName(const FieldDescriptor* field) {
@@ -457,7 +493,7 @@ string FieldName(const FieldDescriptor* field) {
       result += "_p";
     }
   }
-  return SanitizeNameForObjC(result, "_p");
+  return SanitizeNameForObjC(result, "_p", NULL);
 }
 
 string FieldNameCapitalized(const FieldDescriptor* field) {
@@ -817,17 +853,21 @@ bool HasNonZeroDefaultValue(const FieldDescriptor* field) {
   return false;
 }
 
-string BuildFlagsString(const vector<string>& strings) {
+string BuildFlagsString(const FlagType flag_type,
+                        const vector<string>& strings) {
   if (strings.size() == 0) {
-    return "0";
+    return GetZeroEnumNameForFlagType(flag_type);
+  } else if (strings.size() == 1) {
+    return strings[0];
   }
-  string string;
+  string string("(" + GetEnumNameForFlagType(flag_type) + ")(");
   for (size_t i = 0; i != strings.size(); ++i) {
     if (i > 0) {
       string.append(" | ");
     }
     string.append(strings[i]);
   }
+  string.append(")");
   return string;
 }
 
@@ -980,28 +1020,20 @@ bool LoadExpectedPackagePrefixes(const Options &generation_options,
       generation_options.expected_prefixes_path, &collector, out_error);
 }
 
-}  // namespace
-
-bool ValidateObjCClassPrefix(const FileDescriptor* file,
-                             const Options& generation_options,
-                             string* out_error) {
+bool ValidateObjCClassPrefix(
+    const FileDescriptor* file,
+    const string& expected_prefixes_path,
+    const map<string, string>& expected_package_prefixes,
+    string* out_error) {
   const string prefix = file->options().objc_class_prefix();
   const string package = file->package();
 
   // NOTE: src/google/protobuf/compiler/plugin.cc makes use of cerr for some
   // error cases, so it seems to be ok to use as a back door for warnings.
 
-  // Load any expected package prefixes to validate against those.
-  map<string, string> expected_package_prefixes;
-  if (!LoadExpectedPackagePrefixes(generation_options,
-                                   &expected_package_prefixes,
-                                   out_error)) {
-    return false;
-  }
-
   // Check: Error - See if there was an expected prefix for the package and
   // report if it doesn't match (wrong or missing).
-  map<string, string>::iterator package_match =
+  map<string, string>::const_iterator package_match =
       expected_package_prefixes.find(package);
   if (package_match != expected_package_prefixes.end()) {
     // There was an entry, and...
@@ -1031,26 +1063,26 @@ bool ValidateObjCClassPrefix(const FileDescriptor* file,
   // to Apple's rules (the checks above implicitly whitelist anything that
   // doesn't meet these rules).
   if (!ascii_isupper(prefix[0])) {
-    cerr << endl
+    std::cerr << std::endl
          << "protoc:0: warning: Invalid 'option objc_class_prefix = \""
          << prefix << "\";' in '" << file->name() << "';"
-         << " it should start with a capital letter." << endl;
-    cerr.flush();
+         << " it should start with a capital letter." << std::endl;
+    std::cerr.flush();
   }
   if (prefix.length() < 3) {
     // Apple reserves 2 character prefixes for themselves. They do use some
     // 3 character prefixes, but they haven't updated the rules/docs.
-    cerr << endl
+    std::cerr << std::endl
          << "protoc:0: warning: Invalid 'option objc_class_prefix = \""
          << prefix << "\";' in '" << file->name() << "';"
          << " Apple recommends they should be at least 3 characters long."
-         << endl;
-    cerr.flush();
+         << std::endl;
+    std::cerr.flush();
   }
 
   // Look for any other package that uses the same prefix.
   string other_package_for_prefix;
-  for (map<string, string>::iterator i = expected_package_prefixes.begin();
+  for (map<string, string>::const_iterator i = expected_package_prefixes.begin();
        i != expected_package_prefixes.end(); ++i) {
     if (i->second == prefix) {
       other_package_for_prefix = i->first;
@@ -1064,22 +1096,22 @@ bool ValidateObjCClassPrefix(const FileDescriptor* file,
     // The file does not have a package and ...
     if (other_package_for_prefix.empty()) {
       // ... no other package has declared that prefix.
-      cerr << endl
+      std::cerr << std::endl
            << "protoc:0: warning: File '" << file->name() << "' has no "
            << "package. Consider adding a new package to the proto and adding '"
            << "new.package = " << prefix << "' to the expected prefixes file ("
-           << generation_options.expected_prefixes_path << ")." << endl;
-      cerr.flush();
+           << expected_prefixes_path << ")." << std::endl;
+      std::cerr.flush();
     } else {
       // ... another package has declared the same prefix.
-      cerr << endl
+      std::cerr << std::endl
            << "protoc:0: warning: File '" << file->name() << "' has no package "
            << "and package '" << other_package_for_prefix << "' already uses '"
            << prefix << "' as its prefix. Consider either adding a new package "
            << "to the proto, or reusing one of the packages already using this "
            << "prefix in the expected prefixes file ("
-           << generation_options.expected_prefixes_path << ")." << endl;
-      cerr.flush();
+           << expected_prefixes_path << ")." << std::endl;
+      std::cerr.flush();
     }
     return true;
   }
@@ -1094,21 +1126,47 @@ bool ValidateObjCClassPrefix(const FileDescriptor* file,
         "'; that prefix is already used for 'package " +
         other_package_for_prefix + ";'. It can only be reused by listing " +
         "it in the expected file (" +
-        generation_options.expected_prefixes_path + ").";
+        expected_prefixes_path + ").";
     return false;  // Only report first usage of the prefix.
   }
 
   // Check: Warning - If the given package/prefix pair wasn't expected, issue a
   // warning issue a warning suggesting it gets added to the file.
   if (!expected_package_prefixes.empty()) {
-    cerr << endl
+    std::cerr << std::endl
          << "protoc:0: warning: Found unexpected 'option objc_class_prefix = \""
          << prefix << "\";' in '" << file->name() << "';"
          << " consider adding it to the expected prefixes file ("
-         << generation_options.expected_prefixes_path << ")." << endl;
-    cerr.flush();
+         << expected_prefixes_path << ")." << std::endl;
+    std::cerr.flush();
   }
 
+  return true;
+}
+
+}  // namespace
+
+bool ValidateObjCClassPrefixes(const vector<const FileDescriptor*>& files,
+                               const Options& generation_options,
+                               string* out_error) {
+  // Load the expected package prefixes, if available, to validate against.
+  map<string, string> expected_package_prefixes;
+  if (!LoadExpectedPackagePrefixes(generation_options,
+                                   &expected_package_prefixes,
+                                   out_error)) {
+    return false;
+  }
+
+  for (int i = 0; i < files.size(); i++) {
+    bool is_valid =
+        ValidateObjCClassPrefix(files[i],
+                                generation_options.expected_prefixes_path,
+                                expected_package_prefixes,
+                                out_error);
+    if (!is_valid) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -1122,10 +1180,10 @@ void TextFormatDecodeData::AddString(int32 key,
   for (vector<DataEntry>::const_iterator i = entries_.begin();
        i != entries_.end(); ++i) {
     if (i->first == key) {
-      cerr << "error: duplicate key (" << key
+      std::cerr << "error: duplicate key (" << key
            << ") making TextFormat data, input: \"" << input_for_decode
-           << "\", desired: \"" << desired_output << "\"." << endl;
-      cerr.flush();
+           << "\", desired: \"" << desired_output << "\"." << std::endl;
+      std::cerr.flush();
       abort();
     }
   }
@@ -1136,7 +1194,7 @@ void TextFormatDecodeData::AddString(int32 key,
 }
 
 string TextFormatDecodeData::Data() const {
-  ostringstream data_stringstream;
+  std::ostringstream data_stringstream;
 
   if (num_entries() > 0) {
     io::OstreamOutputStream data_outputstream(&data_stringstream);
@@ -1277,18 +1335,18 @@ string DirectDecodeString(const string& str) {
 string TextFormatDecodeData::DecodeDataForString(const string& input_for_decode,
                                                  const string& desired_output) {
   if ((input_for_decode.size() == 0) || (desired_output.size() == 0)) {
-    cerr << "error: got empty string for making TextFormat data, input: \""
+    std::cerr << "error: got empty string for making TextFormat data, input: \""
          << input_for_decode << "\", desired: \"" << desired_output << "\"."
-         << endl;
-    cerr.flush();
+         << std::endl;
+    std::cerr.flush();
     abort();
   }
   if ((input_for_decode.find('\0') != string::npos) ||
       (desired_output.find('\0') != string::npos)) {
-    cerr << "error: got a null char in a string for making TextFormat data,"
+    std::cerr << "error: got a null char in a string for making TextFormat data,"
          << " input: \"" << CEscape(input_for_decode) << "\", desired: \""
-         << CEscape(desired_output) << "\"." << endl;
-    cerr.flush();
+         << CEscape(desired_output) << "\"." << std::endl;
+    std::cerr.flush();
     abort();
   }
 
@@ -1553,9 +1611,9 @@ void ImportWriter::ParseFrameworkMappings() {
   string parse_error;
   if (!ParseSimpleFile(named_framework_to_proto_path_mappings_path_,
                        &collector, &parse_error)) {
-    cerr << "error parsing " << named_framework_to_proto_path_mappings_path_
-         << " : " << parse_error << endl;
-    cerr.flush();
+    std::cerr << "error parsing " << named_framework_to_proto_path_mappings_path_
+         << " : " << parse_error << std::endl;
+    std::cerr.flush();
   }
 }
 
@@ -1585,16 +1643,16 @@ bool ImportWriter::ProtoFrameworkCollector::ConsumeLine(
       map<string, string>::iterator existing_entry =
           map_->find(proto_file.ToString());
       if (existing_entry != map_->end()) {
-        cerr << "warning: duplicate proto file reference, replacing framework entry for '"
+        std::cerr << "warning: duplicate proto file reference, replacing framework entry for '"
              << proto_file.ToString() << "' with '" << framework_name.ToString()
-             << "' (was '" << existing_entry->second << "')." << endl;
-        cerr.flush();
+             << "' (was '" << existing_entry->second << "')." << std::endl;
+        std::cerr.flush();
       }
 
       if (proto_file.find(' ') != StringPiece::npos) {
-        cerr << "note: framework mapping file had a proto file with a space in, hopefully that isn't a missing comma: '"
-             << proto_file.ToString() << "'" << endl;
-        cerr.flush();
+        std::cerr << "note: framework mapping file had a proto file with a space in, hopefully that isn't a missing comma: '"
+             << proto_file.ToString() << "'" << std::endl;
+        std::cerr.flush();
       }
 
       (*map_)[proto_file.ToString()] = framework_name.ToString();

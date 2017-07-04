@@ -49,9 +49,9 @@ ExtensionGenerator::ExtensionGenerator(const string& root_class_name,
   if (descriptor->is_map()) {
     // NOTE: src/google/protobuf/compiler/plugin.cc makes use of cerr for some
     // error cases, so it seems to be ok to use as a back door for errors.
-    cerr << "error: Extension is a map<>!"
-         << " That used to be blocked by the compiler." << endl;
-    cerr.flush();
+    std::cerr << "error: Extension is a map<>!"
+         << " That used to be blocked by the compiler." << std::endl;
+    std::cerr.flush();
     abort();
   }
 }
@@ -67,9 +67,12 @@ void ExtensionGenerator::GenerateMembersHeader(io::Printer* printer) {
   } else {
     vars["comments"] = "";
   }
+  // Unlike normal message fields, check if the file for the extension was
+  // deprecated.
+  vars["deprecated_attribute"] = GetOptionalDeprecatedAttribute(descriptor_, descriptor_->file());
   printer->Print(vars,
                  "$comments$"
-                 "+ (GPBExtensionDescriptor *)$method_name$;\n");
+                 "+ (GPBExtensionDescriptor *)$method_name$$deprecated_attribute$;\n");
 }
 
 void ExtensionGenerator::GenerateStaticVariablesInitialization(
@@ -85,7 +88,7 @@ void ExtensionGenerator::GenerateStaticVariablesInitialization(
   if (descriptor_->containing_type()->options().message_set_wire_format())
     options.push_back("GPBExtensionSetWireFormat");
 
-  vars["options"] = BuildFlagsString(options);
+  vars["options"] = BuildFlagsString(FLAGTYPE_EXTENSION, options);
 
   ObjectiveCType objc_type = GetObjectiveCType(descriptor_);
   string singular_type;

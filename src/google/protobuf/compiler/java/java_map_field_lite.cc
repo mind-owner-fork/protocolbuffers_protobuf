@@ -80,7 +80,7 @@ void SetMessageVariables(const FieldDescriptor* descriptor,
                          int builderBitIndex,
                          const FieldGeneratorInfo* info,
                          Context* context,
-                         map<string, string>* variables) {
+                         std::map<string, string>* variables) {
   SetCommonFieldVariables(descriptor, info, variables);
 
   ClassNameResolver* name_resolver = context->GetNameResolver();
@@ -484,6 +484,7 @@ GenerateMembers(io::Printer* printer) const {
   }
 }
 
+
 void ImmutableMapFieldLiteGenerator::
 GenerateBuilderMembers(io::Printer* printer) const {
   printer->Print(
@@ -642,9 +643,6 @@ GenerateBuilderMembers(io::Printer* printer) const {
           "    $key_type$ key,\n"
           "    $value_type$ value) {\n"
           "  $key_null_check$\n"
-          "  if ($value_enum_type$.forNumber(value) == null) {\n"
-          "    throw new java.lang.IllegalArgumentException();\n"
-          "  }\n"
           "  copyOnWrite();\n"
           "  instance.getMutable$capitalized_name$ValueMap().put(key, value);\n"
           "  return this;\n"
@@ -765,14 +763,14 @@ GenerateParsingCode(io::Printer* printer) const {
     printer->Print(
         variables_,
         "com.google.protobuf.ByteString bytes = input.readBytes();\n"
-        "java.util.Map.Entry<$type_parameters$> $name$ =\n"
+        "java.util.Map.Entry<$type_parameters$> $name$__ =\n"
         "    $default_entry$.parseEntry(bytes, extensionRegistry);\n");
     printer->Print(
         variables_,
-        "if ($value_enum_type$.forNumber($name$.getValue()) == null) {\n"
+        "if ($value_enum_type$.forNumber($name$__.getValue()) == null) {\n"
         "  super.mergeLengthDelimitedField($number$, bytes);\n"
         "} else {\n"
-        "  $name$_.put($name$);\n"
+        "  $name$_.put($name$__);\n"
         "}\n");
   } else {
     printer->Print(

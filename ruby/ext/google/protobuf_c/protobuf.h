@@ -166,6 +166,8 @@ extern VALUE cBuilder;
 extern VALUE cError;
 extern VALUE cParseError;
 
+extern VALUE map_parse_frames;
+
 // We forward-declare all of the Ruby method implementations here because we
 // sometimes call the methods directly across .c files, rather than going
 // through Ruby's method dispatching (e.g. during message parse). It's cleaner
@@ -422,6 +424,7 @@ VALUE Map_dup(VALUE _self);
 VALUE Map_deep_copy(VALUE _self);
 VALUE Map_eq(VALUE _self, VALUE _other);
 VALUE Map_hash(VALUE _self);
+VALUE Map_to_h(VALUE _self);
 VALUE Map_inspect(VALUE _self);
 VALUE Map_merge(VALUE _self, VALUE hashmap);
 VALUE Map_merge_into_self(VALUE _self, VALUE hashmap);
@@ -494,6 +497,7 @@ VALUE Message_deep_copy(VALUE _self);
 VALUE Message_eq(VALUE _self, VALUE _other);
 VALUE Message_hash(VALUE _self);
 VALUE Message_inspect(VALUE _self);
+VALUE Message_to_h(VALUE _self);
 VALUE Message_index(VALUE _self, VALUE field_name);
 VALUE Message_index_set(VALUE _self, VALUE field_name, VALUE value);
 VALUE Message_descriptor(VALUE klass);

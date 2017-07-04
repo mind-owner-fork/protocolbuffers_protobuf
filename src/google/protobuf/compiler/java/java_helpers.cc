@@ -43,6 +43,7 @@
 #include <google/protobuf/wire_format.h>
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/substitute.h>
+#include <google/protobuf/stubs/hash.h>  // for hash<T *>
 
 namespace google {
 namespace protobuf {
@@ -245,6 +246,7 @@ string ClassName(const FileDescriptor* descriptor) {
   return name_resolver.GetClassName(descriptor, true);
 }
 
+
 string ExtraMessageInterfaces(const Descriptor* descriptor) {
   string interfaces = "// @@protoc_insertion_point(message_implements:"
       + descriptor->full_name() + ")";
@@ -360,6 +362,7 @@ const char* BoxedPrimitiveTypeName(JavaType type) {
   return NULL;
 }
 
+
 const char* FieldTypeName(FieldDescriptor::Type field_type) {
   switch (field_type) {
     case FieldDescriptor::TYPE_INT32   : return "INT32";
@@ -415,9 +418,9 @@ string DefaultValue(const FieldDescriptor* field, bool immutable,
              "L";
     case FieldDescriptor::CPPTYPE_DOUBLE: {
       double value = field->default_value_double();
-      if (value == numeric_limits<double>::infinity()) {
+      if (value == std::numeric_limits<double>::infinity()) {
         return "Double.POSITIVE_INFINITY";
-      } else if (value == -numeric_limits<double>::infinity()) {
+      } else if (value == -std::numeric_limits<double>::infinity()) {
         return "Double.NEGATIVE_INFINITY";
       } else if (value != value) {
         return "Double.NaN";
@@ -427,9 +430,9 @@ string DefaultValue(const FieldDescriptor* field, bool immutable,
     }
     case FieldDescriptor::CPPTYPE_FLOAT: {
       float value = field->default_value_float();
-      if (value == numeric_limits<float>::infinity()) {
+      if (value == std::numeric_limits<float>::infinity()) {
         return "Float.POSITIVE_INFINITY";
-      } else if (value == -numeric_limits<float>::infinity()) {
+      } else if (value == -std::numeric_limits<float>::infinity()) {
         return "Float.NEGATIVE_INFINITY";
       } else if (value != value) {
         return "Float.NaN";

@@ -122,7 +122,7 @@ Generate(io::Printer* printer) {
   }
 
   // oneof
-  map<string, string> vars;
+  std::map<string, string> vars;
   for (int i = 0; i < descriptor_->oneof_decl_count(); i++) {
     vars["oneof_name"] = context_->GetOneofGeneratorInfo(
         descriptor_->oneof_decl(i))->name;
@@ -184,6 +184,11 @@ Generate(io::Printer* printer) {
       "}\n"
       "\n");
   } else {
+    // Override methods declared in GeneratedMessage to return the concrete
+    // generated type so callsites won't depend on GeneratedMessage. This
+    // is needed to keep binary compatibility when we change generated code
+    // to subclass a different GeneratedMessage class (e.g., in v3.0.0 release
+    // we changed all generated code to subclass GeneratedMessageV3).
     printer->Print(
       "public final Builder setUnknownFields(\n"
       "    final com.google.protobuf.UnknownFieldSet unknownFields) {\n"
@@ -220,7 +225,7 @@ GenerateDescriptorMethods(io::Printer* printer) {
       "fileclass", name_resolver_->GetImmutableClassName(descriptor_->file()),
       "identifier", UniqueFileScopeIdentifier(descriptor_));
   }
-  vector<const FieldDescriptor*> map_fields;
+  std::vector<const FieldDescriptor*> map_fields;
   for (int i = 0; i < descriptor_->field_count(); i++) {
     const FieldDescriptor* field = descriptor_->field(i);
     if (GetJavaType(field) == JAVATYPE_MESSAGE &&
@@ -456,6 +461,11 @@ GenerateCommonBuilderMethods(io::Printer* printer) {
     "\n",
     "classname", name_resolver_->GetImmutableClassName(descriptor_));
 
+  // Override methods declared in GeneratedMessage to return the concrete
+  // generated type so callsites won't depend on GeneratedMessage. This
+  // is needed to keep binary compatibility when we change generated code
+  // to subclass a different GeneratedMessage class (e.g., in v3.0.0 release
+  // we changed all generated code to subclass GeneratedMessageV3).
   printer->Print(
     "public Builder clone() {\n"
     "  return (Builder) super.clone();\n"
@@ -596,7 +606,6 @@ GenerateCommonBuilderMethods(io::Printer* printer) {
       "  return this;\n"
       "}\n"
       "\n");
-
   }
 }
 
@@ -690,7 +699,7 @@ void MessageBuilderGenerator::GenerateIsInitialized(
         case FieldDescriptor::LABEL_REPEATED:
           if (IsMapEntry(field->message_type())) {
             printer->Print(
-              "for ($type$ item : get$name$().values()) {\n"
+              "for ($type$ item : get$name$Map().values()) {\n"
               "  if (!item.isInitialized()) {\n"
               "    return false;\n"
               "  }\n"

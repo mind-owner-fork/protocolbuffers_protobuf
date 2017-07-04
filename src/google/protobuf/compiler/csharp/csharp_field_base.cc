@@ -122,8 +122,10 @@ void FieldGeneratorBase::GenerateCodecCode(io::Printer* printer) {
 }
 
 void FieldGeneratorBase::AddDeprecatedFlag(io::Printer* printer) {
-  if (descriptor_->options().deprecated())
-  {
+  if (descriptor_->options().deprecated()) {
+    printer->Print("[global::System.ObsoleteAttribute]\n");
+  } else if (descriptor_->type() == FieldDescriptor::TYPE_MESSAGE &&
+           descriptor_->message_type()->options().deprecated()) {
     printer->Print("[global::System.ObsoleteAttribute]\n");
   }
 }
@@ -320,9 +322,9 @@ std::string FieldGeneratorBase::default_value(const FieldDescriptor* descriptor)
       }
     case FieldDescriptor::TYPE_DOUBLE: {
       double value = descriptor->default_value_double();
-      if (value == numeric_limits<double>::infinity()) {
+      if (value == std::numeric_limits<double>::infinity()) {
         return "double.PositiveInfinity";
-      } else if (value == -numeric_limits<double>::infinity()) {
+      } else if (value == -std::numeric_limits<double>::infinity()) {
         return "double.NegativeInfinity";
       } else if (MathLimits<double>::IsNaN(value)) {
         return "double.NaN";
@@ -331,9 +333,9 @@ std::string FieldGeneratorBase::default_value(const FieldDescriptor* descriptor)
     }
     case FieldDescriptor::TYPE_FLOAT: {
       float value = descriptor->default_value_float();
-      if (value == numeric_limits<float>::infinity()) {
+      if (value == std::numeric_limits<float>::infinity()) {
         return "float.PositiveInfinity";
-      } else if (value == -numeric_limits<float>::infinity()) {
+      } else if (value == -std::numeric_limits<float>::infinity()) {
         return "float.NegativeInfinity";
       } else if (MathLimits<float>::IsNaN(value)) {
         return "float.NaN";

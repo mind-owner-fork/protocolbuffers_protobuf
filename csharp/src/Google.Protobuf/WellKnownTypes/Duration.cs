@@ -25,7 +25,7 @@ namespace Google.Protobuf.WellKnownTypes {
             "Ch5nb29nbGUvcHJvdG9idWYvZHVyYXRpb24ucHJvdG8SD2dvb2dsZS5wcm90",
             "b2J1ZiIqCghEdXJhdGlvbhIPCgdzZWNvbmRzGAEgASgDEg0KBW5hbm9zGAIg",
             "ASgFQnwKE2NvbS5nb29nbGUucHJvdG9idWZCDUR1cmF0aW9uUHJvdG9QAVoq",
-            "Z2l0aHViLmNvbS9nb2xhbmcvcHJvdG9idWYvcHR5cGVzL2R1cmF0aW9uoAEB",
+            "Z2l0aHViLmNvbS9nb2xhbmcvcHJvdG9idWYvcHR5cGVzL2R1cmF0aW9u+AEB",
             "ogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90",
             "bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
@@ -39,46 +39,64 @@ namespace Google.Protobuf.WellKnownTypes {
   }
   #region Messages
   /// <summary>
-  ///  A Duration represents a signed, fixed-length span of time represented
-  ///  as a count of seconds and fractions of seconds at nanosecond
-  ///  resolution. It is independent of any calendar and concepts like "day"
-  ///  or "month". It is related to Timestamp in that the difference between
-  ///  two Timestamp values is a Duration and it can be added or subtracted
-  ///  from a Timestamp. Range is approximately +-10,000 years.
+  /// A Duration represents a signed, fixed-length span of time represented
+  /// as a count of seconds and fractions of seconds at nanosecond
+  /// resolution. It is independent of any calendar and concepts like "day"
+  /// or "month". It is related to Timestamp in that the difference between
+  /// two Timestamp values is a Duration and it can be added or subtracted
+  /// from a Timestamp. Range is approximately +-10,000 years.
   ///
-  ///  Example 1: Compute Duration from two Timestamps in pseudo code.
+  /// # Examples
   ///
-  ///      Timestamp start = ...;
-  ///      Timestamp end = ...;
-  ///      Duration duration = ...;
+  /// Example 1: Compute Duration from two Timestamps in pseudo code.
   ///
-  ///      duration.seconds = end.seconds - start.seconds;
-  ///      duration.nanos = end.nanos - start.nanos;
+  ///     Timestamp start = ...;
+  ///     Timestamp end = ...;
+  ///     Duration duration = ...;
   ///
-  ///      if (duration.seconds &lt; 0 &amp;&amp; duration.nanos > 0) {
-  ///        duration.seconds += 1;
-  ///        duration.nanos -= 1000000000;
-  ///      } else if (durations.seconds > 0 &amp;&amp; duration.nanos &lt; 0) {
-  ///        duration.seconds -= 1;
-  ///        duration.nanos += 1000000000;
-  ///      }
+  ///     duration.seconds = end.seconds - start.seconds;
+  ///     duration.nanos = end.nanos - start.nanos;
   ///
-  ///  Example 2: Compute Timestamp from Timestamp + Duration in pseudo code.
+  ///     if (duration.seconds &lt; 0 &amp;&amp; duration.nanos > 0) {
+  ///       duration.seconds += 1;
+  ///       duration.nanos -= 1000000000;
+  ///     } else if (durations.seconds > 0 &amp;&amp; duration.nanos &lt; 0) {
+  ///       duration.seconds -= 1;
+  ///       duration.nanos += 1000000000;
+  ///     }
   ///
-  ///      Timestamp start = ...;
-  ///      Duration duration = ...;
-  ///      Timestamp end = ...;
+  /// Example 2: Compute Timestamp from Timestamp + Duration in pseudo code.
   ///
-  ///      end.seconds = start.seconds + duration.seconds;
-  ///      end.nanos = start.nanos + duration.nanos;
+  ///     Timestamp start = ...;
+  ///     Duration duration = ...;
+  ///     Timestamp end = ...;
   ///
-  ///      if (end.nanos &lt; 0) {
-  ///        end.seconds -= 1;
-  ///        end.nanos += 1000000000;
-  ///      } else if (end.nanos >= 1000000000) {
-  ///        end.seconds += 1;
-  ///        end.nanos -= 1000000000;
-  ///      }
+  ///     end.seconds = start.seconds + duration.seconds;
+  ///     end.nanos = start.nanos + duration.nanos;
+  ///
+  ///     if (end.nanos &lt; 0) {
+  ///       end.seconds -= 1;
+  ///       end.nanos += 1000000000;
+  ///     } else if (end.nanos >= 1000000000) {
+  ///       end.seconds += 1;
+  ///       end.nanos -= 1000000000;
+  ///     }
+  ///
+  /// Example 3: Compute Duration from datetime.timedelta in Python.
+  ///
+  ///     td = datetime.timedelta(days=3, minutes=10)
+  ///     duration = Duration()
+  ///     duration.FromTimedelta(td)
+  ///
+  /// # JSON Mapping
+  ///
+  /// In JSON format, the Duration type is encoded as a string rather than an
+  /// object, where the string ends in the suffix "s" (indicating seconds) and
+  /// is preceded by the number of seconds, with nanoseconds expressed as
+  /// fractional seconds. For example, 3 seconds with 0 nanoseconds should be
+  /// encoded in JSON format as "3s", while 3 seconds and 1 nanosecond should
+  /// be expressed in JSON format as "3.000000001s", and 3 seconds and 1
+  /// microsecond should be expressed in JSON format as "3.000001s".
   /// </summary>
   public sealed partial class Duration : pb::IMessage<Duration> {
     private static readonly pb::MessageParser<Duration> _parser = new pb::MessageParser<Duration>(() => new Duration());
@@ -117,8 +135,9 @@ namespace Google.Protobuf.WellKnownTypes {
     public const int SecondsFieldNumber = 1;
     private long seconds_;
     /// <summary>
-    ///  Signed seconds of the span of time. Must be from -315,576,000,000
-    ///  to +315,576,000,000 inclusive.
+    /// Signed seconds of the span of time. Must be from -315,576,000,000
+    /// to +315,576,000,000 inclusive. Note: these bounds are computed from:
+    /// 60 sec/min * 60 min/hr * 24 hr/day * 365.25 days/year * 10000 years
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     public long Seconds {
@@ -132,12 +151,12 @@ namespace Google.Protobuf.WellKnownTypes {
     public const int NanosFieldNumber = 2;
     private int nanos_;
     /// <summary>
-    ///  Signed fractions of a second at nanosecond resolution of the span
-    ///  of time. Durations less than one second are represented with a 0
-    ///  `seconds` field and a positive or negative `nanos` field. For durations
-    ///  of one second or more, a non-zero value for the `nanos` field must be
-    ///  of the same sign as the `seconds` field. Must be from -999,999,999
-    ///  to +999,999,999 inclusive.
+    /// Signed fractions of a second at nanosecond resolution of the span
+    /// of time. Durations less than one second are represented with a 0
+    /// `seconds` field and a positive or negative `nanos` field. For durations
+    /// of one second or more, a non-zero value for the `nanos` field must be
+    /// of the same sign as the `seconds` field. Must be from -999,999,999
+    /// to +999,999,999 inclusive.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     public int Nanos {

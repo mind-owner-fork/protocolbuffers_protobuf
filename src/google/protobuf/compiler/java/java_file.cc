@@ -65,7 +65,7 @@ namespace java {
 namespace {
 
 struct FieldDescriptorCompare {
-  bool operator ()(const FieldDescriptor* f1, const FieldDescriptor* f2) {
+  bool operator ()(const FieldDescriptor* f1, const FieldDescriptor* f2) const {
     if(f1 == NULL) {
       return false;
     }
@@ -90,7 +90,7 @@ bool CollectExtensions(const Message& message,
   // There are unknown fields that could be extensions, thus this call fails.
   if (reflection->GetUnknownFields(message).field_count() > 0) return false;
 
-  vector<const FieldDescriptor*> fields;
+  std::vector<const FieldDescriptor*> fields;
   reflection->ListFields(message, &fields);
 
   for (int i = 0; i < fields.size(); i++) {
@@ -154,12 +154,6 @@ void CollectExtensions(const FileDescriptorProto& file_proto,
   }
 }
 
-// Compare two field descriptors, returning true if the first should come
-// before the second.
-bool CompareFieldsByName(const FieldDescriptor *a, const FieldDescriptor *b) {
-  return a->full_name() < b->full_name();
-}
-
 // Our static initialization methods can become very, very large.
 // So large that if we aren't careful we end up blowing the JVM's
 // 64K bytes of bytecode/method. Fortunately, since these static
@@ -189,8 +183,6 @@ void MaybeRestartJavaMethod(io::Printer* printer,
     *bytecode_estimate = 0;
   }
 }
-
-
 }  // namespace
 
 FileGenerator::FileGenerator(const FileDescriptor* file, const Options& options,
@@ -543,8 +535,8 @@ static void GenerateSibling(const string& package_dir,
                             const string& java_package,
                             const DescriptorClass* descriptor,
                             GeneratorContext* context,
-                            vector<string>* file_list, bool annotate_code,
-                            vector<string>* annotation_list,
+                            std::vector<string>* file_list, bool annotate_code,
+                            std::vector<string>* annotation_list,
                             const string& name_suffix,
                             GeneratorClass* generator,
                             void (GeneratorClass::*pfn)(io::Printer* printer)) {
@@ -583,8 +575,8 @@ static void GenerateSibling(const string& package_dir,
 
 void FileGenerator::GenerateSiblings(const string& package_dir,
                                      GeneratorContext* context,
-                                     vector<string>* file_list,
-                                     vector<string>* annotation_list) {
+                                     std::vector<string>* file_list,
+                                     std::vector<string>* annotation_list) {
   if (MultipleJavaFiles(file_, immutable_api_)) {
     for (int i = 0; i < file_->enum_type_count(); i++) {
       if (HasDescriptorMethods(file_, context_->EnforceLite())) {

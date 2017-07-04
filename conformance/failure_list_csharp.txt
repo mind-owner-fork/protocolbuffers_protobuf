@@ -1,4 +1,4 @@
-JsonInput.FieldNameWithMixedCases.JsonOutput
-JsonInput.FieldNameWithMixedCases.ProtobufOutput
-JsonInput.FieldNameWithMixedCases.Validator
-JsonInput.OriginalProtoFieldName.JsonOutput
+Required.ProtobufInput.IllegalZeroFieldNum_Case_0
+Required.ProtobufInput.IllegalZeroFieldNum_Case_1
+Required.ProtobufInput.IllegalZeroFieldNum_Case_2
+Required.ProtobufInput.IllegalZeroFieldNum_Case_3

@@ -1,6 +1,7 @@
 #!/usr/bin/ruby
 
 require 'google/protobuf'
+require 'json'
 require 'test/unit'
 
 # ------------- generated code --------------
@@ -183,12 +184,15 @@ module BasicTest
 
     def test_hash
       m1 = TestMessage.new(:optional_int32 => 42)
-      m2 = TestMessage.new(:optional_int32 => 102)
+      m2 = TestMessage.new(:optional_int32 => 102, repeated_string: ['please', 'work', 'ok?'])
+      m3 = TestMessage.new(:optional_int32 => 102, repeated_string: ['please', 'work', 'ok?'])
       assert m1.hash != 0
       assert m2.hash != 0
+      assert m3.hash != 0
       # relying on the randomness here -- if hash function changes and we are
       # unlucky enough to get a collision, then change the values above.
       assert m1.hash != m2.hash
+      assert_equal m2.hash, m3.hash
     end
 
     def test_unknown_field_errors
@@ -664,6 +668,13 @@ module BasicTest
       end
     end
 
+    def test_map_corruption
+      # This pattern led to a crash in a previous version of upb/protobuf.
+      m = MapMessage.new(map_string_int32: { "aaa" => 1 })
+      m.map_string_int32['podid'] = 2
+      m.map_string_int32['aaa'] = 3
+    end
+
     def test_map_encode_decode
       m = MapMessage.new(
         :map_string_int32 => {"a" => 1, "b" => 2},
@@ -917,6 +928,16 @@ module BasicTest
         :repeated_uint64=>[]
       }
       assert_equal expected_result, m.to_h
+
+      m = MapMessage.new(
+        :map_string_int32 => {"a" => 1, "b" => 2},
+        :map_string_msg => {"a" => TestMessage2.new(:foo => 1),
+                            "b" => TestMessage2.new(:foo => 2)})
+      expected_result = {
+        :map_string_int32 => {"a" => 1, "b" => 2},
+        :map_string_msg => {"a" => {:foo => 1}, "b" => {:foo => 2}}
+      }
+      assert_equal expected_result, m.to_h
     end
 
 
@@ -1153,6 +1174,8 @@ module BasicTest
 
       json_text = TestMessage.encode_json(m)
       m2 = TestMessage.decode_json(json_text)
+      puts m.inspect
+      puts m2.inspect
       assert m == m2
 
       # Crash case from GitHub issue 283.
@@ -1164,19 +1187,145 @@ module BasicTest
       Foo.encode_json(Foo.new(bar: bar, baz: [baz1, baz2]))
     end
 
+    def test_json_emit_defaults
+      # TODO: Fix JSON in JRuby version.
+      return if RUBY_PLATFORM == "java"
+      m = TestMessage.new
+
+      expected = {
+        optionalInt32: 0,
+        optionalInt64: 0,
+        optionalUint32: 0,
+        optionalUint64: 0,
+        optionalBool: false,
+        optionalFloat: 0,
+        optionalDouble: 0,
+        optionalString: "",
+        optionalBytes: "",
+        optionalEnum: "Default",
+        repeatedInt32: [],
+        repeatedInt64: [],
+        repeatedUint32: [],
+        repeatedUint64: [],
+        repeatedBool: [],
+        repeatedFloat: [],
+        repeatedDouble: [],
+        repeatedString: [],
+        repeatedBytes: [],
+        repeatedMsg: [],
+        repeatedEnum: []
+      }
+
+      actual = TestMessage.encode_json(m, :emit_defaults => true)
+
+      assert JSON.parse(actual, :symbolize_names => true) == expected
+    end
+
+    def test_json_emit_defaults_submsg
+      # TODO: Fix JSON in JRuby version.
+      return if RUBY_PLATFORM == "java"
+      m = TestMessage.new(optional_msg: TestMessage2.new)
+
+      expected = {
+        optionalInt32: 0,
+        optionalInt64: 0,
+        optionalUint32: 0,
+        optionalUint64: 0,
+        optionalBool: false,
+        optionalFloat: 0,
+        optionalDouble: 0,
+        optionalString: "",
+        optionalBytes: "",
+        optionalMsg: {foo: 0},
+        optionalEnum: "Default",
+        repeatedInt32: [],
+        repeatedInt64: [],
+        repeatedUint32: [],
+        repeatedUint64: [],
+        repeatedBool: [],
+        repeatedFloat: [],
+        repeatedDouble: [],
+        repeatedString: [],
+        repeatedBytes: [],
+        repeatedMsg: [],
+        repeatedEnum: []
+      }
+
+      actual = TestMessage.encode_json(m, :emit_defaults => true)
+
+      assert JSON.parse(actual, :symbolize_names => true) == expected
+    end
+
+    def test_json_emit_defaults_repeated_submsg
+      # TODO: Fix JSON in JRuby version.
+      return if RUBY_PLATFORM == "java"
+      m = TestMessage.new(repeated_msg: [TestMessage2.new])
+
+      expected = {
+        optionalInt32: 0,
+        optionalInt64: 0,
+        optionalUint32: 0,
+        optionalUint64: 0,
+        optionalBool: false,
+        optionalFloat: 0,
+        optionalDouble: 0,
+        optionalString: "",
+        optionalBytes: "",
+        optionalEnum: "Default",
+        repeatedInt32: [],
+        repeatedInt64: [],
+        repeatedUint32: [],
+        repeatedUint64: [],
+        repeatedBool: [],
+        repeatedFloat: [],
+        repeatedDouble: [],
+        repeatedString: [],
+        repeatedBytes: [],
+        repeatedMsg: [{foo: 0}],
+        repeatedEnum: []
+      }
+
+      actual = TestMessage.encode_json(m, :emit_defaults => true)
+
+      assert JSON.parse(actual, :symbolize_names => true) == expected
+    end
+
     def test_json_maps
       # TODO: Fix JSON in JRuby version.
       return if RUBY_PLATFORM == "java"
       m = MapMessage.new(:map_string_int32 => {"a" => 1})
-      expected = '{"mapStringInt32":{"a":1},"mapStringMsg":{}}'
-      expected_preserve = '{"map_string_int32":{"a":1},"map_string_msg":{}}'
-      assert MapMessage.encode_json(m) == expected
+      expected = {mapStringInt32: {a: 1}, mapStringMsg: {}}
+      expected_preserve = {map_string_int32: {a: 1}, map_string_msg: {}}
+      assert JSON.parse(MapMessage.encode_json(m), :symbolize_names => true) == expected
 
       json = MapMessage.encode_json(m, :preserve_proto_fieldnames => true)
-      assert json == expected_preserve
+      assert JSON.parse(json, :symbolize_names => true) == expected_preserve
 
       m2 = MapMessage.decode_json(MapMessage.encode_json(m))
       assert m == m2
+    end
+
+    def test_json_maps_emit_defaults_submsg
+      # TODO: Fix JSON in JRuby version.
+      return if RUBY_PLATFORM == "java"
+      m = MapMessage.new(:map_string_msg => {"a" => TestMessage2.new})
+      expected = {mapStringInt32: {}, mapStringMsg: {a: {foo: 0}}}
+
+      actual = MapMessage.encode_json(m, :emit_defaults => true)
+
+      assert JSON.parse(actual, :symbolize_names => true) == expected
+    end
+
+    def test_comparison_with_arbitrary_object
+      assert MapMessage.new != nil
+    end
+
+    def test_respond_to
+      # This test fails with JRuby 1.7.23, likely because of an old JRuby bug.
+      return if RUBY_PLATFORM == "java"
+      msg = MapMessage.new
+      assert msg.respond_to?(:map_string_int32)
+      assert !msg.respond_to?(:bacon)
     end
   end
 end
