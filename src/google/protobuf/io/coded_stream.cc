@@ -121,9 +121,9 @@ CodedInputStream::Limit CodedInputStream::PushLimit(int byte_limit) {
   // security: byte_limit is possibly evil, so check for negative values
   // and overflow. Also check that the new requested limit is before the
   // previous limit; otherwise we continue to enforce the previous limit.
-  if GOOGLE_PREDICT_TRUE(byte_limit >= 0 &&
-                  byte_limit <= INT_MAX - current_position &&
-                  byte_limit < current_limit_ - current_position) {
+  if (GOOGLE_PREDICT_TRUE(byte_limit >= 0 &&
+                        byte_limit <= INT_MAX - current_position &&
+                        byte_limit < current_limit_ - current_position)) {
     current_limit_ = current_position + byte_limit;
     RecomputeBufferLimits();
   }
@@ -173,10 +173,7 @@ int CodedInputStream::BytesUntilLimit() const {
   return current_limit_ - current_position;
 }
 
-void CodedInputStream::SetTotalBytesLimit(
-    int total_bytes_limit, int warning_threshold) {
-  (void) warning_threshold;
-
+void CodedInputStream::SetTotalBytesLimit(int total_bytes_limit) {
   // Make sure the limit isn't already past, since this could confuse other
   // code.
   int current_position = CurrentPosition();
@@ -197,17 +194,7 @@ void CodedInputStream::PrintTotalBytesLimitError() {
                 "in google/protobuf/io/coded_stream.h.";
 }
 
-bool CodedInputStream::Skip(int count) {
-  if (count < 0) return false;  // security: count is often user-supplied
-
-  const int original_buffer_size = BufferSize();
-
-  if (count <= original_buffer_size) {
-    // Just skipping within the current buffer.  Easy.
-    Advance(count);
-    return true;
-  }
-
+bool CodedInputStream::SkipFallback(int count, int original_buffer_size) {
   if (buffer_size_after_limit_ > 0) {
     // We hit a limit inside this buffer.  Advance to the limit and fail.
     Advance(original_buffer_size);
@@ -325,7 +312,8 @@ namespace {
 // The first part of the pair is true iff the read was successful.  The second
 // part is buffer + (number of bytes read).  This function is always inlined,
 // so returning a pair is costless.
-GOOGLE_ATTRIBUTE_ALWAYS_INLINE ::std::pair<bool, const uint8*> ReadVarint32FromArray(
+GOOGLE_PROTOBUF_ATTRIBUTE_ALWAYS_INLINE
+::std::pair<bool, const uint8*> ReadVarint32FromArray(
     uint32 first_byte, const uint8* buffer,
     uint32* value);
 inline ::std::pair<bool, const uint8*> ReadVarint32FromArray(
@@ -362,8 +350,8 @@ inline ::std::pair<bool, const uint8*> ReadVarint32FromArray(
   return std::make_pair(true, ptr);
 }
 
-GOOGLE_ATTRIBUTE_ALWAYS_INLINE::std::pair<bool, const uint8*> ReadVarint64FromArray(
-    const uint8* buffer, uint64* value);
+GOOGLE_PROTOBUF_ATTRIBUTE_ALWAYS_INLINE::std::pair<bool, const uint8*>
+ReadVarint64FromArray(const uint8* buffer, uint64* value);
 inline ::std::pair<bool, const uint8*> ReadVarint64FromArray(
     const uint8* buffer, uint64* value) {
   const uint8* ptr = buffer;

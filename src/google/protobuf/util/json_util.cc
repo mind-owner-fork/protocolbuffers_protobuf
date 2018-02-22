@@ -50,7 +50,9 @@ namespace util {
 
 namespace internal {
 ZeroCopyStreamByteSink::~ZeroCopyStreamByteSink() {
-  stream_->BackUp(buffer_size_);
+  if (buffer_size_ > 0) {
+    stream_->BackUp(buffer_size_);
+  }
 }
 
 void ZeroCopyStreamByteSink::Append(const char* bytes, size_t len) {
@@ -61,9 +63,11 @@ void ZeroCopyStreamByteSink::Append(const char* bytes, size_t len) {
       buffer_size_ -= len;
       return;
     }
-    memcpy(buffer_, bytes, buffer_size_);
-    bytes += buffer_size_;
-    len -= buffer_size_;
+    if (buffer_size_ > 0) {
+      memcpy(buffer_, bytes, buffer_size_);
+      bytes += buffer_size_;
+      len -= buffer_size_;
+    }
     if (!stream_->Next(&buffer_, &buffer_size_)) {
       // There isn't a way for ByteSink to report errors.
       buffer_size_ = 0;

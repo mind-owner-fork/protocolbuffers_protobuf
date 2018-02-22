@@ -28,9 +28,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifdef _MSC_VER
-#include <io.h>
-#else
+#ifndef _MSC_VER
 #include <unistd.h>
 #endif
 #include <climits>
@@ -49,7 +47,9 @@
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/io_win32.h>
 #include <google/protobuf/stubs/strutil.h>
+
 
 // NOTE: src/google/protobuf/compiler/plugin.cc makes use of cerr for some
 // error cases, so it seems to be ok to use as a back door for errors.
@@ -58,6 +58,16 @@ namespace google {
 namespace protobuf {
 namespace compiler {
 namespace objectivec {
+
+// <io.h> is transitively included in this file. Import the functions explicitly
+// in this port namespace to avoid ambiguous definition.
+namespace posix {
+#ifdef _WIN32
+using ::google::protobuf::internal::win32::open;
+#else
+using ::open;
+#endif
+}  // namespace port
 
 Options::Options() {
   // Default is the value of the env for the package prefixes.
@@ -90,7 +100,7 @@ bool ascii_isnewline(char c) {
 // Do not expose this outside of helpers, stick to having functions for specific
 // cases (ClassName(), FieldName()), so there is always consistent suffix rules.
 string UnderscoresToCamelCase(const string& input, bool first_capitalized) {
-  vector<string> values;
+  std::vector<string> values;
   string current;
 
   bool last_char_was_number = false;
@@ -131,7 +141,7 @@ string UnderscoresToCamelCase(const string& input, bool first_capitalized) {
 
   string result;
   bool first_segment_forces_upper = false;
-  for (vector<string>::iterator i = values.begin(); i != values.end(); ++i) {
+  for (std::vector<string>::iterator i = values.begin(); i != values.end(); ++i) {
     string value = *i;
     bool all_upper = (kUpperSegments.count(value) > 0);
     if (all_upper && (result.length() == 0)) {
@@ -854,7 +864,7 @@ bool HasNonZeroDefaultValue(const FieldDescriptor* field) {
 }
 
 string BuildFlagsString(const FlagType flag_type,
-                        const vector<string>& strings) {
+                        const std::vector<string>& strings) {
   if (strings.size() == 0) {
     return GetZeroEnumNameForFlagType(flag_type);
   } else if (strings.size() == 1) {
@@ -876,7 +886,7 @@ string BuildCommentsString(const SourceLocation& location,
   const string& comments = location.leading_comments.empty()
                                ? location.trailing_comments
                                : location.leading_comments;
-  vector<string> lines;
+  std::vector<string> lines;
   SplitStringAllowEmpty(comments, "\n", &lines);
   while (!lines.empty() && lines.back().empty()) {
     lines.pop_back();
@@ -980,13 +990,13 @@ namespace {
 
 class ExpectedPrefixesCollector : public LineConsumer {
  public:
-  ExpectedPrefixesCollector(map<string, string>* inout_package_to_prefix_map)
+  ExpectedPrefixesCollector(std::map<string, string>* inout_package_to_prefix_map)
       : prefix_map_(inout_package_to_prefix_map) {}
 
   virtual bool ConsumeLine(const StringPiece& line, string* out_error);
 
  private:
-  map<string, string>* prefix_map_;
+  std::map<string, string>* prefix_map_;
 };
 
 bool ExpectedPrefixesCollector::ConsumeLine(
@@ -1009,7 +1019,7 @@ bool ExpectedPrefixesCollector::ConsumeLine(
 }
 
 bool LoadExpectedPackagePrefixes(const Options &generation_options,
-                                 map<string, string>* prefix_map,
+                                 std::map<string, string>* prefix_map,
                                  string* out_error) {
   if (generation_options.expected_prefixes_path.empty()) {
     return true;
@@ -1023,7 +1033,7 @@ bool LoadExpectedPackagePrefixes(const Options &generation_options,
 bool ValidateObjCClassPrefix(
     const FileDescriptor* file,
     const string& expected_prefixes_path,
-    const map<string, string>& expected_package_prefixes,
+    const std::map<string, string>& expected_package_prefixes,
     string* out_error) {
   const string prefix = file->options().objc_class_prefix();
   const string package = file->package();
@@ -1033,7 +1043,7 @@ bool ValidateObjCClassPrefix(
 
   // Check: Error - See if there was an expected prefix for the package and
   // report if it doesn't match (wrong or missing).
-  map<string, string>::const_iterator package_match =
+  std::map<string, string>::const_iterator package_match =
       expected_package_prefixes.find(package);
   if (package_match != expected_package_prefixes.end()) {
     // There was an entry, and...
@@ -1082,7 +1092,7 @@ bool ValidateObjCClassPrefix(
 
   // Look for any other package that uses the same prefix.
   string other_package_for_prefix;
-  for (map<string, string>::const_iterator i = expected_package_prefixes.begin();
+  for (std::map<string, string>::const_iterator i = expected_package_prefixes.begin();
        i != expected_package_prefixes.end(); ++i) {
     if (i->second == prefix) {
       other_package_for_prefix = i->first;
@@ -1146,11 +1156,11 @@ bool ValidateObjCClassPrefix(
 
 }  // namespace
 
-bool ValidateObjCClassPrefixes(const vector<const FileDescriptor*>& files,
+bool ValidateObjCClassPrefixes(const std::vector<const FileDescriptor*>& files,
                                const Options& generation_options,
                                string* out_error) {
   // Load the expected package prefixes, if available, to validate against.
-  map<string, string> expected_package_prefixes;
+  std::map<string, string> expected_package_prefixes;
   if (!LoadExpectedPackagePrefixes(generation_options,
                                    &expected_package_prefixes,
                                    out_error)) {
@@ -1177,7 +1187,7 @@ TextFormatDecodeData::~TextFormatDecodeData() { }
 void TextFormatDecodeData::AddString(int32 key,
                                      const string& input_for_decode,
                                      const string& desired_output) {
-  for (vector<DataEntry>::const_iterator i = entries_.begin();
+  for (std::vector<DataEntry>::const_iterator i = entries_.begin();
        i != entries_.end(); ++i) {
     if (i->first == key) {
       std::cerr << "error: duplicate key (" << key
@@ -1201,7 +1211,7 @@ string TextFormatDecodeData::Data() const {
     io::CodedOutputStream output_stream(&data_outputstream);
 
     output_stream.WriteVarint32(num_entries());
-    for (vector<DataEntry>::const_iterator i = entries_.begin();
+    for (std::vector<DataEntry>::const_iterator i = entries_.begin();
          i != entries_.end(); ++i) {
       output_stream.WriteVarint32(i->first);
       output_stream.WriteString(i->second);
@@ -1464,7 +1474,7 @@ bool ParseSimpleFile(
     const string& path, LineConsumer* line_consumer, string* out_error) {
   int fd;
   do {
-    fd = open(path.c_str(), O_RDONLY);
+    fd = posix::open(path.c_str(), O_RDONLY);
   } while (fd < 0 && errno == EINTR);
   if (fd < 0) {
     *out_error =
@@ -1519,7 +1529,7 @@ void ImportWriter::AddFile(const FileDescriptor* file,
     ParseFrameworkMappings();
   }
 
-  map<string, string>::iterator proto_lookup =
+  std::map<string, string>::iterator proto_lookup =
       proto_file_to_framework_name_.find(file->name());
   if (proto_lookup != proto_file_to_framework_name_.end()) {
     other_framework_imports_.push_back(
@@ -1551,7 +1561,7 @@ void ImportWriter::Print(io::Printer* printer) const {
     printer->Print(
         "#if $cpp_symbol$\n",
         "cpp_symbol", cpp_symbol);
-    for (vector<string>::const_iterator iter = protobuf_framework_imports_.begin();
+    for (std::vector<string>::const_iterator iter = protobuf_framework_imports_.begin();
          iter != protobuf_framework_imports_.end(); ++iter) {
       printer->Print(
           " #import <$framework_name$/$header$>\n",
@@ -1560,7 +1570,7 @@ void ImportWriter::Print(io::Printer* printer) const {
     }
     printer->Print(
         "#else\n");
-    for (vector<string>::const_iterator iter = protobuf_non_framework_imports_.begin();
+    for (std::vector<string>::const_iterator iter = protobuf_non_framework_imports_.begin();
          iter != protobuf_non_framework_imports_.end(); ++iter) {
       printer->Print(
           " #import \"$header$\"\n",
@@ -1577,10 +1587,10 @@ void ImportWriter::Print(io::Printer* printer) const {
       printer->Print("\n");
     }
 
-    for (vector<string>::const_iterator iter = other_framework_imports_.begin();
+    for (std::vector<string>::const_iterator iter = other_framework_imports_.begin();
          iter != other_framework_imports_.end(); ++iter) {
       printer->Print(
-          " #import <$header$>\n",
+          "#import <$header$>\n",
           "header", *iter);
     }
 
@@ -1592,10 +1602,10 @@ void ImportWriter::Print(io::Printer* printer) const {
       printer->Print("\n");
     }
 
-    for (vector<string>::const_iterator iter = other_imports_.begin();
+    for (std::vector<string>::const_iterator iter = other_imports_.begin();
          iter != other_imports_.end(); ++iter) {
       printer->Print(
-          " #import \"$header$\"\n",
+          "#import \"$header$\"\n",
           "header", *iter);
     }
   }
@@ -1640,7 +1650,7 @@ bool ImportWriter::ProtoFrameworkCollector::ConsumeLine(
     StringPiece proto_file(proto_file_list, start, offset - start);
     StringPieceTrimWhitespace(&proto_file);
     if (proto_file.size() != 0) {
-      map<string, string>::iterator existing_entry =
+      std::map<string, string>::iterator existing_entry =
           map_->find(proto_file.ToString());
       if (existing_entry != map_->end()) {
         std::cerr << "warning: duplicate proto file reference, replacing framework entry for '"

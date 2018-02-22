@@ -56,6 +56,23 @@ class MapFieldTest extends PHPUnit_Framework_TestCase {
         unset($arr['3.1']);
         unset($arr[MAX_INT32_STRING]);
         $this->assertEquals(0, count($arr));
+
+        // Test foreach.
+        $arr = new MapField(GPBType::INT32, GPBType::INT32);
+        for ($i = 0; $i < 3; $i++) {
+          $arr[$i] = $i;
+        }
+        $i = 0;
+        $arr_test = [];
+        foreach ($arr as $key => $val) {
+          $this->assertSame($key, $val);
+          $arr_test[] = $key;
+          $i++;
+        }
+        $this->assertTrue(isset($arr_test[0]));
+        $this->assertTrue(isset($arr_test[1]));
+        $this->assertTrue(isset($arr_test[2]));
+        $this->assertSame(3, $i);
     }
 
     #########################################################
@@ -366,6 +383,23 @@ class MapFieldTest extends PHPUnit_Framework_TestCase {
         $this->assertEquals(1, count($arr));
         unset($arr[True]);
         $this->assertEquals(0, count($arr));
+
+        // Test foreach.
+        $arr = new MapField(GPBType::STRING, GPBType::STRING);
+        for ($i = 0; $i < 3; $i++) {
+          $arr[$i] = $i;
+        }
+        $i = 0;
+        $arr_test = [];
+        foreach ($arr as $key => $val) {
+          $this->assertSame($key, $val);
+          $arr_test[] = $key;
+          $i++;
+        }
+        $this->assertTrue(isset($arr_test['0']));
+        $this->assertTrue(isset($arr_test['1']));
+        $this->assertTrue(isset($arr_test['2']));
+        $this->assertSame(3, $i);
     }
 
     #########################################################
@@ -383,6 +417,29 @@ class MapFieldTest extends PHPUnit_Framework_TestCase {
         $this->assertSame(1, $arr[0]->getA());
 
         $this->assertEquals(1, count($arr));
+
+        // Test foreach.
+        $arr = new MapField(GPBType::INT32,
+            GPBType::MESSAGE, TestMessage_Sub::class);
+        for ($i = 0; $i < 3; $i++) {
+          $arr[$i] = new TestMessage_Sub();;
+          $arr[$i]->setA($i);
+        }
+        $i = 0;
+        $key_test = [];
+        $value_test = [];
+        foreach ($arr as $key => $val) {
+          $key_test[] = $key;
+          $value_test[] = $val->getA();
+          $i++;
+        }
+        $this->assertTrue(isset($key_test['0']));
+        $this->assertTrue(isset($key_test['1']));
+        $this->assertTrue(isset($key_test['2']));
+        $this->assertTrue(isset($value_test['0']));
+        $this->assertTrue(isset($value_test['1']));
+        $this->assertTrue(isset($value_test['2']));
+        $this->assertSame(3, $i);
     }
 
     #########################################################

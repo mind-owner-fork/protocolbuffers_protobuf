@@ -245,9 +245,9 @@ def cc_proto_library(
   )
 
   if default_runtime and not default_runtime in cc_libs:
-    cc_libs += [default_runtime]
+    cc_libs = cc_libs + [default_runtime]
   if use_grpc_plugin:
-    cc_libs += ["//external:grpc_lib"]
+    cc_libs = cc_libs + ["//external:grpc_lib"]
 
   native.cc_library(
       name=name,
@@ -371,7 +371,7 @@ def py_proto_library(
   )
 
   if default_runtime and not default_runtime in py_libs + deps:
-    py_libs += [default_runtime]
+    py_libs = py_libs + [default_runtime]
 
   native.py_library(
       name=name,
@@ -400,3 +400,15 @@ def internal_protobuf_py_tests(
         srcs=[s],
         main=s,
         **kargs)
+
+
+def check_protobuf_required_bazel_version():
+  """For WORKSPACE files, to check the installed version of bazel.
+
+  This ensures bazel supports our approach to proto_library() depending on a
+  copied filegroup. (Fixed in bazel 0.5.4)
+  """
+  expected = apple_common.dotted_version("0.5.4")
+  current = apple_common.dotted_version(native.bazel_version)
+  if current.compare_to(expected) < 0:
+    fail("Bazel must be newer than 0.5.4")

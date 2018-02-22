@@ -8,7 +8,6 @@ use Google\Protobuf\Internal\GPBType;
 use Google\Protobuf\Internal\GPBWire;
 use Google\Protobuf\Internal\RepeatedField;
 use Google\Protobuf\Internal\InputStream;
-
 use Google\Protobuf\Internal\GPBUtil;
 
 /**
@@ -110,6 +109,11 @@ class FileOptions extends \Google\Protobuf\Internal\Message
     private $py_generic_services = false;
     private $has_py_generic_services = false;
     /**
+     * Generated from protobuf field <code>optional bool php_generic_services = 42 [default = false];</code>
+     */
+    private $php_generic_services = false;
+    private $has_php_generic_services = false;
+    /**
      * Is this file deprecated?
      * Depending on the target platform, this can emit Deprecated annotations
      * for everything in the file, or it will be completely ignored; in the very
@@ -170,7 +174,8 @@ class FileOptions extends \Google\Protobuf\Internal\Message
     private $php_namespace = '';
     private $has_php_namespace = false;
     /**
-     * The parser stores options it doesn't recognize here. See above.
+     * The parser stores options it doesn't recognize here.
+     * See the documentation for the "Options" section above.
      *
      * Generated from protobuf field <code>repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;</code>
      */
@@ -549,6 +554,34 @@ class FileOptions extends \Google\Protobuf\Internal\Message
     }
 
     /**
+     * Generated from protobuf field <code>optional bool php_generic_services = 42 [default = false];</code>
+     * @return bool
+     */
+    public function getPhpGenericServices()
+    {
+        return $this->php_generic_services;
+    }
+
+    /**
+     * Generated from protobuf field <code>optional bool php_generic_services = 42 [default = false];</code>
+     * @param bool $var
+     * @return $this
+     */
+    public function setPhpGenericServices($var)
+    {
+        GPBUtil::checkBool($var);
+        $this->php_generic_services = $var;
+        $this->has_php_generic_services = true;
+
+        return $this;
+    }
+
+    public function hasPhpGenericServices()
+    {
+        return $this->has_php_generic_services;
+    }
+
+    /**
      * Is this file deprecated?
      * Depending on the target platform, this can emit Deprecated annotations
      * for everything in the file, or it will be completely ignored; in the very
@@ -795,7 +828,8 @@ class FileOptions extends \Google\Protobuf\Internal\Message
     }
 
     /**
-     * The parser stores options it doesn't recognize here. See above.
+     * The parser stores options it doesn't recognize here.
+     * See the documentation for the "Options" section above.
      *
      * Generated from protobuf field <code>repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;</code>
      * @return \Google\Protobuf\Internal\RepeatedField
@@ -806,13 +840,14 @@ class FileOptions extends \Google\Protobuf\Internal\Message
     }
 
     /**
-     * The parser stores options it doesn't recognize here. See above.
+     * The parser stores options it doesn't recognize here.
+     * See the documentation for the "Options" section above.
      *
      * Generated from protobuf field <code>repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;</code>
      * @param \Google\Protobuf\Internal\UninterpretedOption[]|\Google\Protobuf\Internal\RepeatedField $var
      * @return $this
      */
-    public function setUninterpretedOption(&$var)
+    public function setUninterpretedOption($var)
     {
         $arr = GPBUtil::checkRepeatedField($var, \Google\Protobuf\Internal\GPBType::MESSAGE, \Google\Protobuf\Internal\UninterpretedOption::class);
         $this->uninterpreted_option = $arr;

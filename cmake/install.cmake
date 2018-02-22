@@ -1,9 +1,16 @@
 include(GNUInstallDirs)
 
-foreach(_library
-  libprotobuf-lite
-  libprotobuf
-  libprotoc)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/protobuf.pc.cmake
+               ${CMAKE_CURRENT_BINARY_DIR}/protobuf.pc @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/protobuf-lite.pc.cmake
+               ${CMAKE_CURRENT_BINARY_DIR}/protobuf-lite.pc @ONLY)
+
+set(_protobuf_libraries libprotobuf-lite libprotobuf)
+if (protobuf_BUILD_PROTOC_BINARIES)
+    list(APPEND _protobuf_libraries libprotoc)
+endif (protobuf_BUILD_PROTOC_BINARIES)
+
+foreach(_library ${_protobuf_libraries})
   set_property(TARGET ${_library}
     PROPERTY INTERFACE_INCLUDE_DIRECTORIES
     $<BUILD_INTERFACE:${protobuf_source_dir}/src>
@@ -14,8 +21,12 @@ foreach(_library
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${_library})
 endforeach()
 
-install(TARGETS protoc EXPORT protobuf-targets
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT protoc)
+if (protobuf_BUILD_PROTOC_BINARIES)
+  install(TARGETS protoc EXPORT protobuf-targets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT protoc)
+endif (protobuf_BUILD_PROTOC_BINARIES)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/protobuf.pc ${CMAKE_CURRENT_BINARY_DIR}/protobuf-lite.pc DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 
 file(STRINGS extract_includes.bat.in _extract_strings
   REGEX "^copy")
@@ -94,10 +105,18 @@ configure_file(protobuf-options.cmake
   ${CMAKE_INSTALL_CMAKEDIR}/protobuf-options.cmake @ONLY)
 
 # Allows the build directory to be used as a find directory.
-export(TARGETS libprotobuf-lite libprotobuf libprotoc protoc
-  NAMESPACE protobuf::
-  FILE ${CMAKE_INSTALL_CMAKEDIR}/protobuf-targets.cmake
-)
+
+if (protobuf_BUILD_PROTOC_BINARIES)
+  export(TARGETS libprotobuf-lite libprotobuf libprotoc protoc
+    NAMESPACE protobuf::
+    FILE ${CMAKE_INSTALL_CMAKEDIR}/protobuf-targets.cmake
+  )
+else (protobuf_BUILD_PROTOC_BINARIES)
+  export(TARGETS libprotobuf-lite libprotobuf
+    NAMESPACE protobuf::
+    FILE ${CMAKE_INSTALL_CMAKEDIR}/protobuf-targets.cmake
+  )
+endif (protobuf_BUILD_PROTOC_BINARIES)
 
 install(EXPORT protobuf-targets
   DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"

@@ -40,10 +40,9 @@
 
 #define GOOGLE_PROTOBUF_HAVE_HASH_MAP 1
 #define GOOGLE_PROTOBUF_HAVE_HASH_SET 1
-#define GOOGLE_PROTOBUF_HAVE_64BIT_HASH 1
 
 // Use C++11 unordered_{map|set} if available.
-#if ((_LIBCPP_STD_VER >= 11) || \
+#if ((defined(_LIBCPP_STD_VER) && _LIBCPP_STD_VER >= 11) || \
     (((__cplusplus >= 201103L) || defined(__GXX_EXPERIMENTAL_CXX0X)) && \
     (__GLIBCXX__ > 20090421)))
 # define GOOGLE_PROTOBUF_HAS_CXX11_HASH
@@ -93,8 +92,11 @@
 #  define GOOGLE_PROTOBUF_HASH_SET_CLASS hash_set
 # endif
 
-# if __GNUC__ == 4 && __GNUC__MINOR__ <= 1
-#  undef GOOGLE_PROTOBUF_HAVE_64BIT_HASH
+// GCC <= 4.1 does not define std::tr1::hash for `long long int` or `long long unsigned int`
+# if __GNUC__ == 4 && defined(__GNUC__MINOR__) && __GNUC__MINOR__ <= 1
+#  undef GOOGLE_PROTOBUF_HAS_TR1
+#  undef GOOGLE_PROTOBUF_HAVE_HASH_MAP
+#  undef GOOGLE_PROTOBUF_HAVE_HASH_SET
 # endif
 
 // Version checks for MSC.
@@ -406,8 +408,8 @@ struct hash<string> {
 };
 
 template <typename First, typename Second>
-struct hash<pair<First, Second> > {
-  inline size_t operator()(const pair<First, Second>& key) const {
+struct hash<std::pair<First, Second> > {
+  inline size_t operator()(const std::pair<First, Second>& key) const {
     size_t first_hash = hash<First>()(key.first);
     size_t second_hash = hash<Second>()(key.second);
 
@@ -418,8 +420,8 @@ struct hash<pair<First, Second> > {
 
   static const size_t bucket_size = 4;
   static const size_t min_buckets = 8;
-  inline bool operator()(const pair<First, Second>& a,
-                           const pair<First, Second>& b) const {
+  inline bool operator()(const std::pair<First, Second>& a,
+                           const std::pair<First, Second>& b) const {
     return a < b;
   }
 };

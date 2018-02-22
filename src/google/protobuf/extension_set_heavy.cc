@@ -37,10 +37,12 @@
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/extension_set.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
+#include <google/protobuf/unknown_field_set.h>
 #include <google/protobuf/wire_format.h>
 #include <google/protobuf/wire_format_lite_inl.h>
 
@@ -257,8 +259,10 @@ MessageLite* ExtensionSet::AddMessage(const FieldDescriptor* descriptor,
 
   // RepeatedPtrField<Message> does not know how to Add() since it cannot
   // allocate an abstract object, so we have to be tricky.
-  MessageLite* result = extension->repeated_message_value
-      ->AddFromCleared<GenericTypeHandler<MessageLite> >();
+  MessageLite* result =
+      reinterpret_cast< ::google::protobuf::internal::RepeatedPtrFieldBase*>(
+          extension->repeated_message_value)
+          ->AddFromCleared<GenericTypeHandler<MessageLite> >();
   if (result == NULL) {
     const MessageLite* prototype;
     if (extension->repeated_message_value->size() == 0) {
@@ -389,7 +393,9 @@ size_t ExtensionSet::Extension::SpaceUsedExcludingSelfLong() const {
         // type handler.
         total_size +=
             sizeof(*repeated_message_value) +
-            RepeatedMessage_SpaceUsedExcludingSelfLong(repeated_message_value);
+            RepeatedMessage_SpaceUsedExcludingSelfLong(
+                reinterpret_cast< ::google::protobuf::internal::RepeatedPtrFieldBase*>(
+                    repeated_message_value));
         break;
     }
   } else {
@@ -489,10 +495,10 @@ uint8* ExtensionSet::Extension::InternalSerializeFieldWithCachedSizesToArray(
         HANDLE_TYPE(    ENUM,     Enum,    enum);
 #undef HANDLE_TYPE
 
-        case WireFormatLite::TYPE_STRING:
-        case WireFormatLite::TYPE_BYTES:
-        case WireFormatLite::TYPE_GROUP:
-        case WireFormatLite::TYPE_MESSAGE:
+        case FieldDescriptor::TYPE_STRING:
+        case FieldDescriptor::TYPE_BYTES:
+        case FieldDescriptor::TYPE_GROUP:
+        case FieldDescriptor::TYPE_MESSAGE:
           GOOGLE_LOG(FATAL) << "Non-primitive types can't be packed.";
           break;
       }

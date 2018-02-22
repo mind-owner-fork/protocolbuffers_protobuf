@@ -124,7 +124,10 @@ const StringPiece GetTypeWithoutUrl(StringPiece type_url) {
     return type_url.substr(kTypeUrlSize + 1);
   } else {
     size_t idx = type_url.rfind('/');
-    return type_url.substr(idx + 1);
+    if (idx != type_url.npos) {
+      type_url.remove_prefix(idx + 1);
+    }
+    return type_url;
   }
 }
 
@@ -350,17 +353,12 @@ bool IsMap(const google::protobuf::Field& field,
              google::protobuf::Field_Cardinality_CARDINALITY_REPEATED &&
          (GetBoolOptionOrDefault(type.options(), "map_entry", false) ||
           GetBoolOptionOrDefault(type.options(),
-                                 "google.protobuf.MessageOptions.map_entry", false) ||
-          GetBoolOptionOrDefault(type.options(),
                                  "google.protobuf.MessageOptions.map_entry",
                                  false));
 }
 
 bool IsMessageSetWireFormat(const google::protobuf::Type& type) {
   return GetBoolOptionOrDefault(type.options(), "message_set_wire_format",
-                                false) ||
-         GetBoolOptionOrDefault(type.options(),
-                                "google.protobuf.MessageOptions.message_set_wire_format",
                                 false) ||
          GetBoolOptionOrDefault(
              type.options(),

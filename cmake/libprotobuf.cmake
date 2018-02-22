@@ -13,6 +13,7 @@ set(libprotobuf_files
   ${protobuf_source_dir}/src/google/protobuf/extension_set_heavy.cc
   ${protobuf_source_dir}/src/google/protobuf/field_mask.pb.cc
   ${protobuf_source_dir}/src/google/protobuf/generated_message_reflection.cc
+  ${protobuf_source_dir}/src/google/protobuf/generated_message_table_driven.cc
   ${protobuf_source_dir}/src/google/protobuf/io/gzip_stream.cc
   ${protobuf_source_dir}/src/google/protobuf/io/printer.cc
   ${protobuf_source_dir}/src/google/protobuf/io/strtod.cc
@@ -124,5 +125,7 @@ if(MSVC AND protobuf_BUILD_SHARED_LIBS)
     PRIVATE LIBPROTOBUF_EXPORTS)
 endif()
 set_target_properties(libprotobuf PROPERTIES
+    VERSION ${protobuf_VERSION}
     OUTPUT_NAME ${LIB_PREFIX}protobuf
     DEBUG_POSTFIX "${protobuf_DEBUG_POSTFIX}")
+add_library(protobuf::libprotobuf ALIAS libprotobuf)

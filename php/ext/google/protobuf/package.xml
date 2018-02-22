@@ -10,11 +10,11 @@
   <email>protobuf-opensource@google.com</email>
   <active>yes</active>
  </lead>
- <date>2017-01-13</date>
- <time>16:06:07</time>
+ <date>2017-12-11</date>
+ <time>11:02:07</time>
  <version>
-  <release>3.3.0</release>
-  <api>3.3.0</api>
+  <release>3.5.1</release>
+  <api>3.5.1</api>
  </version>
  <stability>
   <release>stable</release>
@@ -40,6 +40,7 @@ GA release.
     <file baseinstalldir="/" name="upb.h" role="src" />
     <file baseinstalldir="/" name="utf8.c" role="src" />
     <file baseinstalldir="/" name="utf8.h" role="src" />
+    <file baseinstalldir="/" name="LICENSE" role="doc" />
   </dir>
  </contents>
  <dependencies>
@@ -98,6 +99,118 @@ Second alpha release.
    </stability>
    <date>2017-04-28</date>
    <time>16:06:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.3.1</release>
+    <api>3.3.0</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-05-08</date>
+   <time>15:33:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.3.2</release>
+    <api>3.3.0</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-06-21</date>
+   <time>15:33:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.4.0</release>
+    <api>3.4.0</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-08-16</date>
+   <time>15:33:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.4.1</release>
+    <api>3.4.1</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-09-14</date>
+   <time>11:02:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.5.0</release>
+    <api>3.5.0</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-11-15</date>
+   <time>11:02:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.5.0.1</release>
+    <api>3.5.0.1</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-12-06</date>
+   <time>11:02:07</time>
+   <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
+   <notes>
+GA release.
+   </notes>
+  </release>
+  <release>
+   <version>
+    <release>3.5.1</release>
+    <api>3.5.1</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <date>2017-12-11</date>
+   <time>11:02:07</time>
    <license uri="https://opensource.org/licenses/BSD-3-Clause">3-Clause BSD License</license>
    <notes>
 GA release.

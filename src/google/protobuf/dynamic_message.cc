@@ -250,6 +250,10 @@ class DynamicMessage : public Message {
   };
 
   DynamicMessage(const TypeInfo* type_info);
+
+  // This should only be used by GetPrototypeNoLock() to avoid dead lock.
+  DynamicMessage(const TypeInfo* type_info, bool lock_factory);
+
   ~DynamicMessage();
 
   // Called on the prototype after construction to initialize message fields.
@@ -259,7 +263,7 @@ class DynamicMessage : public Message {
 
   Message* New() const;
   Message* New(::google::protobuf::Arena* arena) const;
-  ::google::protobuf::Arena* GetArena() const { return NULL; };
+  ::google::protobuf::Arena* GetArena() const { return arena_; }
 
   int GetCachedSize() const;
   void SetCachedSize(int size) const;
@@ -278,9 +282,9 @@ class DynamicMessage : public Message {
 #endif  // !_MSC_VER
 
  private:
-  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(DynamicMessage);
   DynamicMessage(const TypeInfo* type_info, ::google::protobuf::Arena* arena);
-  void SharedCtor();
+
+  void SharedCtor(bool lock_factory);
 
   inline bool is_prototype() const {
     return type_info_->prototype == this ||
@@ -297,24 +301,29 @@ class DynamicMessage : public Message {
   }
 
   const TypeInfo* type_info_;
+  Arena* const arena_;
   // TODO(kenton):  Make this an atomic<int> when C++ supports it.
   mutable int cached_byte_size_;
+  GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(DynamicMessage);
 };
 
 DynamicMessage::DynamicMessage(const TypeInfo* type_info)
-  : type_info_(type_info),
-    cached_byte_size_(0) {
-  SharedCtor();
+    : type_info_(type_info), arena_(NULL), cached_byte_size_(0) {
+  SharedCtor(true);
 }
 
 DynamicMessage::DynamicMessage(const TypeInfo* type_info,
                                ::google::protobuf::Arena* arena)
-  : type_info_(type_info),
-    cached_byte_size_(0) {
-  SharedCtor();
+    : type_info_(type_info), arena_(arena), cached_byte_size_(0) {
+  SharedCtor(true);
 }
 
-void DynamicMessage::SharedCtor() {
+DynamicMessage::DynamicMessage(const TypeInfo* type_info, bool lock_factory)
+    : type_info_(type_info), arena_(NULL), cached_byte_size_(0) {
+  SharedCtor(lock_factory);
+}
+
+void DynamicMessage::SharedCtor(bool lock_factory) {
   // We need to call constructors for various fields manually and set
   // default values where appropriate.  We use placement new to call
   // constructors.  If you haven't heard of placement new, I suggest Googling
@@ -332,10 +341,10 @@ void DynamicMessage::SharedCtor() {
   }
 
   new (OffsetToPointer(type_info_->internal_metadata_offset))
-      InternalMetadataWithArena;
+      InternalMetadataWithArena(arena_);
 
   if (type_info_->extensions_offset != -1) {
-    new (OffsetToPointer(type_info_->extensions_offset)) ExtensionSet;
+    new (OffsetToPointer(type_info_->extensions_offset)) ExtensionSet(arena_);
   }
   for (int i = 0; i < descriptor->field_count(); i++) {
     const FieldDescriptor* field = descriptor->field(i);
@@ -344,14 +353,14 @@ void DynamicMessage::SharedCtor() {
       continue;
     }
     switch (field->cpp_type()) {
-#define HANDLE_TYPE(CPPTYPE, TYPE)                                           \
-      case FieldDescriptor::CPPTYPE_##CPPTYPE:                               \
-        if (!field->is_repeated()) {                                         \
-          new(field_ptr) TYPE(field->default_value_##TYPE());                \
-        } else {                                                             \
-          new(field_ptr) RepeatedField<TYPE>();                              \
-        }                                                                    \
-        break;
+#define HANDLE_TYPE(CPPTYPE, TYPE)                         \
+  case FieldDescriptor::CPPTYPE_##CPPTYPE:                 \
+    if (!field->is_repeated()) {                           \
+      new (field_ptr) TYPE(field->default_value_##TYPE()); \
+    } else {                                               \
+      new (field_ptr) RepeatedField<TYPE>(arena_);         \
+    }                                                      \
+    break;
 
       HANDLE_TYPE(INT32 , int32 );
       HANDLE_TYPE(INT64 , int64 );
@@ -366,7 +375,7 @@ void DynamicMessage::SharedCtor() {
         if (!field->is_repeated()) {
           new(field_ptr) int(field->default_value_enum()->number());
         } else {
-          new(field_ptr) RepeatedField<int>();
+          new (field_ptr) RepeatedField<int>(arena_);
         }
         break;
 
@@ -387,7 +396,7 @@ void DynamicMessage::SharedCtor() {
               ArenaStringPtr* asp = new(field_ptr) ArenaStringPtr();
               asp->UnsafeSetDefault(default_value);
             } else {
-              new(field_ptr) RepeatedPtrField<string>();
+              new (field_ptr) RepeatedPtrField<string>(arena_);
             }
             break;
         }
@@ -398,10 +407,32 @@ void DynamicMessage::SharedCtor() {
           new(field_ptr) Message*(NULL);
         } else {
           if (IsMapFieldInApi(field)) {
-            new (field_ptr) DynamicMapField(
-                type_info_->factory->GetPrototypeNoLock(field->message_type()));
+            // We need to lock in most cases to avoid data racing. Only not lock
+            // when the constructor is called inside GetPrototype(), in which
+            // case we have already locked the factory.
+            if (lock_factory) {
+              if (arena_ != NULL) {
+                new (field_ptr) DynamicMapField(
+                    type_info_->factory->GetPrototype(field->message_type()),
+                    arena_);
+              } else {
+                new (field_ptr) DynamicMapField(
+                    type_info_->factory->GetPrototype(field->message_type()));
+              }
+            } else {
+              if (arena_ != NULL) {
+                new (field_ptr)
+                    DynamicMapField(type_info_->factory->GetPrototypeNoLock(
+                                        field->message_type()),
+                                    arena_);
+              } else {
+                new (field_ptr)
+                    DynamicMapField(type_info_->factory->GetPrototypeNoLock(
+                        field->message_type()));
+              }
+            }
           } else {
-            new (field_ptr) RepeatedPtrField<Message>();
+            new (field_ptr) RepeatedPtrField<Message>(arena_);
           }
         }
         break;
@@ -549,19 +580,17 @@ void DynamicMessage::CrossLinkPrototypes() {
   }
 }
 
-Message* DynamicMessage::New() const {
-  void* new_base = operator new(type_info_->size);
-  memset(new_base, 0, type_info_->size);
-  return new(new_base) DynamicMessage(type_info_);
-}
+Message* DynamicMessage::New() const { return New(NULL); }
 
 Message* DynamicMessage::New(::google::protobuf::Arena* arena) const {
   if (arena != NULL) {
-    Message* message = New();
-    arena->Own(message);
-    return message;
+    void* new_base = Arena::CreateArray<char>(arena, type_info_->size);
+    memset(new_base, 0, type_info_->size);
+    return new (new_base) DynamicMessage(type_info_, arena);
   } else {
-    return New();
+    void* new_base = operator new(type_info_->size);
+    memset(new_base, 0, type_info_->size);
+    return new (new_base) DynamicMessage(type_info_);
   }
 }
 
@@ -751,7 +780,10 @@ const Message* DynamicMessageFactory::GetPrototypeNoLock(
   // map). To break the cyclic dependency, we have to assgin the address of
   // prototype into type_info first.
   type_info->prototype = static_cast<DynamicMessage*>(base);
-  DynamicMessage* prototype = new(base) DynamicMessage(type_info);
+
+  // We have already locked the factory so we should not lock in the constructor
+  // of dynamic message to avoid dead lock.
+  DynamicMessage* prototype = new (base) DynamicMessage(type_info, false);
 
   if (type->oneof_decl_count() > 0 || num_weak_fields > 0) {
     // Construct default oneof instance.

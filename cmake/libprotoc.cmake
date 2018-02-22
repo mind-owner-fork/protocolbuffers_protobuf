@@ -11,6 +11,7 @@ set(libprotoc_files
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_map_field.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_message.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_message_field.cc
+  ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_padding_optimizer.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_primitive_field.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_service.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_string_field.cc
@@ -88,7 +89,6 @@ set(libprotoc_files
   ${protobuf_source_dir}/src/google/protobuf/compiler/php/php_generator.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/plugin.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/plugin.pb.cc
-  ${protobuf_source_dir}/src/google/protobuf/compiler/profile.pb.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/python/python_generator.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/ruby/ruby_generator.cc
   ${protobuf_source_dir}/src/google/protobuf/compiler/subprocess.cc
@@ -104,7 +104,6 @@ set(libprotoc_headers
   ${protobuf_source_dir}/src/google/protobuf/compiler/parser.h
   ${protobuf_source_dir}/src/google/protobuf/compiler/plugin.h
   ${protobuf_source_dir}/src/google/protobuf/compiler/plugin.pb.h
-  ${protobuf_source_dir}/src/google/protobuf/compiler/profile.pb.h
   ${protobuf_source_dir}/src/google/protobuf/compiler/subprocess.h
   ${protobuf_source_dir}/src/google/protobuf/compiler/zip_writer.h
   ${protobuf_source_dir}/src/google/protobuf/compiler/cpp/cpp_enum.h
@@ -226,5 +225,7 @@ if(MSVC AND protobuf_BUILD_SHARED_LIBS)
 endif()
 set_target_properties(libprotoc PROPERTIES
     COMPILE_DEFINITIONS LIBPROTOC_EXPORTS
+    VERSION ${protobuf_VERSION}
     OUTPUT_NAME ${LIB_PREFIX}protoc
     DEBUG_POSTFIX "${protobuf_DEBUG_POSTFIX}")
+add_library(protobuf::libprotoc ALIAS libprotoc)

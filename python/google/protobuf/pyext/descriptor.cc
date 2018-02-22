@@ -107,10 +107,6 @@ bool _CalledFromGeneratedFile(int stacklevel) {
       return false;
     }
   }
-  if (frame->f_globals != frame->f_locals) {
-    // Not at global module scope
-    return false;
-  }
 
   if (frame->f_code->co_filename == NULL) {
     return false;
@@ -123,12 +119,21 @@ bool _CalledFromGeneratedFile(int stacklevel) {
     PyErr_Clear();
     return false;
   }
+  if ((filename_size < 3) || (strcmp(&filename[filename_size - 3], ".py") != 0)) {
+    // Cython's stack does not have .py file name and is not at global module scope.
+    return true;
+  }
   if (filename_size < 7) {
     // filename is too short.
     return false;
   }
   if (strcmp(&filename[filename_size - 7], "_pb2.py") != 0) {
     // Filename is not ending with _pb2.
+    return false;
+  }
+  
+  if (frame->f_globals != frame->f_locals) {
+    // Not at global module scope
     return false;
   }
 #endif
@@ -709,6 +714,10 @@ static PyObject* GetJsonName(PyBaseDescriptor* self, void *closure) {
   return PyString_FromCppString(_GetDescriptor(self)->json_name());
 }
 
+static PyObject* GetFile(PyBaseDescriptor *self, void *closure) {
+  return PyFileDescriptor_FromDescriptor(_GetDescriptor(self)->file());
+}
+
 static PyObject* GetType(PyBaseDescriptor *self, void *closure) {
   return PyInt_FromLong(_GetDescriptor(self)->type());
 }
@@ -899,6 +908,7 @@ static PyGetSetDef Getters[] = {
   { "name", (getter)GetName, NULL, "Unqualified name"},
   { "camelcase_name", (getter)GetCamelcaseName, NULL, "Camelcase name"},
   { "json_name", (getter)GetJsonName, NULL, "Json name"},
+  { "file", (getter)GetFile, NULL, "File Descriptor"},
   { "type", (getter)GetType, NULL, "C++ Type"},
   { "cpp_type", (getter)GetCppType, NULL, "C++ Type"},
   { "label", (getter)GetLabel, NULL, "Label"},
@@ -1570,6 +1580,10 @@ static PyObject* GetFullName(PyBaseDescriptor* self, void *closure) {
   return PyString_FromCppString(_GetDescriptor(self)->full_name());
 }
 
+static PyObject* GetFile(PyBaseDescriptor *self, void *closure) {
+  return PyFileDescriptor_FromDescriptor(_GetDescriptor(self)->file());
+}
+
 static PyObject* GetIndex(PyBaseDescriptor *self, void *closure) {
   return PyInt_FromLong(_GetDescriptor(self)->index());
 }
@@ -1611,6 +1625,7 @@ static PyObject* CopyToProto(PyBaseDescriptor *self, PyObject *target) {
 static PyGetSetDef Getters[] = {
   { "name", (getter)GetName, NULL, "Name", NULL},
   { "full_name", (getter)GetFullName, NULL, "Full name", NULL},
+  { "file", (getter)GetFile, NULL, "File descriptor"},
   { "index", (getter)GetIndex, NULL, "Index", NULL},
 
   { "methods", (getter)GetMethods, NULL, "Methods", NULL},
