@@ -2,42 +2,27 @@
 
 # phpunit has memory leak by itself. Thus, it cannot be used to test memory leak.
 
-require_once('generated/NoNamespaceEnum.php');
-require_once('generated/NoNamespaceMessage.php');
-require_once('generated/NoNamespaceMessage_NestedEnum.php');
-require_once('generated/PrefixEmpty.php');
-require_once('generated/PrefixTestPrefix.php');
-require_once('generated/TestEmptyNamespace.php');
-require_once('generated/Bar/TestInclude.php');
-require_once('generated/Foo/PBARRAY.php');
-require_once('generated/Foo/PBEmpty.php');
-require_once('generated/Foo/TestEnum.php');
-require_once('generated/Foo/TestIncludeNamespaceMessage.php');
-require_once('generated/Foo/TestIncludePrefixMessage.php');
-require_once('generated/Foo/TestMessage.php');
-require_once('generated/Foo/TestMessage_Empty.php');
-require_once('generated/Foo/TestMessage_NestedEnum.php');
-require_once('generated/Foo/TestMessage_Sub.php');
-require_once('generated/Foo/TestPackedMessage.php');
-require_once('generated/Foo/TestPhpDoc.php');
-require_once('generated/Foo/TestRandomFieldOrder.php');
-require_once('generated/Foo/TestReverseFieldOrder.php');
-require_once('generated/Foo/TestUnpackedMessage.php');
-require_once('generated/Foo/testLowerCaseMessage.php');
-require_once('generated/Foo/testLowerCaseEnum.php');
-require_once('generated/GPBMetadata/Proto/Test.php');
-require_once('generated/GPBMetadata/Proto/TestEmptyPhpNamespace.php');
-require_once('generated/GPBMetadata/Proto/TestInclude.php');
-require_once('generated/GPBMetadata/Proto/TestNoNamespace.php');
-require_once('generated/GPBMetadata/Proto/TestPhpNamespace.php');
-require_once('generated/GPBMetadata/Proto/TestPrefix.php');
-require_once('generated/Php/Test/TestNamespace.php');
+class HasDestructor
+{
+  function __construct() {
+    $this->foo = $this;
+  }
+
+  function __destruct() {
+    new Foo\TestMessage();
+  }
+}
+
+require_once('../vendor/autoload.php');
 require_once('test_util.php');
+
+$has_destructor = new HasDestructor();
 
 use Google\Protobuf\Internal\RepeatedField;
 use Google\Protobuf\Internal\GPBType;
+use Foo\TestAny;
 use Foo\TestMessage;
-use Foo\TestMessage_Sub;
+use Foo\TestMessage\Sub;
 
 $from = new TestMessage();
 TestUtil::setTestMessage($from);
@@ -49,6 +34,13 @@ $to = new TestMessage();
 $to->mergeFromString($data);
 
 TestUtil::assertTestMessage($to);
+
+$from = new TestMessage();
+TestUtil::setTestMessage2($from);
+
+$data = $from->serializeToString();
+
+$to->mergeFromString($data);
 
 // TODO(teboring): This causes following tests fail in php7.
 # $from->setRecursive($from);
@@ -90,7 +82,7 @@ $n = new TestMessage();
 $n->mergeFromString($data);
 assert('abc' === $n->getOneofString());
 
-$sub_m = new TestMessage_Sub();
+$sub_m = new Sub();
 $sub_m->setA(1);
 $m->setOneofMessage($sub_m);
 assert(0 === $m->getOneofInt32());
@@ -104,7 +96,7 @@ assert(1 === $n->getOneofMessage()->getA());
 
 $m = new TestMessage();
 $m->mergeFromString(hex2bin('F80601'));
-assert('F80601', bin2hex($m->serializeToString()));
+assert('f80601' === bin2hex($m->serializeToString()));
 
 // Test create repeated field via array.
 $str_arr = array("abc");
@@ -132,7 +124,7 @@ date_default_timezone_set('UTC');
 $from = new DateTime('2011-01-01T15:03:01.012345UTC');
 $timestamp->fromDateTime($from);
 assert($from->format('U') == $timestamp->getSeconds());
-assert(0 == $timestamp->getNanos());
+assert(1000 * $from->format('u') == $timestamp->getNanos());
 
 $to = $timestamp->toDateTime();
 assert(\DateTime::class == get_class($to));
@@ -142,13 +134,45 @@ $from = new \Google\Protobuf\Value();
 $from->setNumberValue(1);
 assert(1, $from->getNumberValue());
 
+// Test discard unknown in message.
+$m = new TestMessage();
+$from = hex2bin('F80601');
+$m->mergeFromString($from);
+$m->discardUnknownFields();
+$to = $m->serializeToString();
+assert("" === bin2hex($to));
+
+// Test clear
+$m = new TestMessage();
+TestUtil::setTestMessage($m);
+$m->clear();
+
+// Test unset map element
+$m = new TestMessage();
+$map = $m->getMapStringString();
+$map[1] = 1;
+unset($map[1]);
+
 // Test descriptor
 $pool = \Google\Protobuf\DescriptorPool::getGeneratedPool();
 $desc = $pool->getDescriptorByClassName("\Foo\TestMessage");
 $field = $desc->getField(1);
 
-# $from = new TestMessage();
-# $to = new TestMessage();
-# TestUtil::setTestMessage($from);
-# $to->mergeFrom($from);
-# TestUtil::assertTestMessage($to);
+$from = new TestMessage();
+$to = new TestMessage();
+TestUtil::setTestMessage($from);
+$to->mergeFrom($from);
+TestUtil::assertTestMessage($to);
+
+// Test decode Any
+// Make sure packed message has been created at least once.
+$packed = new TestMessage();
+
+$m = new TestAny();
+$m->mergeFromJsonString(
+    "{\"any\":" .
+    "  {\"@type\":\"type.googleapis.com/foo.TestMessage\"," .
+    "   \"optionalInt32\":1}}");
+assert("type.googleapis.com/foo.TestMessage" ===
+       $m->getAny()->getTypeUrl());
+assert("0801" === bin2hex($m->getAny()->getValue()));

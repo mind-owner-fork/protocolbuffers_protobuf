@@ -31,21 +31,42 @@
 #include <google/protobuf/implicit_weak_message.h>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <google/protobuf/parse_context.h>
 #include <google/protobuf/wire_format_lite.h>
+
+// Must be included last.
+#include <google/protobuf/port_def.inc>
+
+PROTOBUF_PRAGMA_INIT_SEG
 
 namespace google {
 namespace protobuf {
 namespace internal {
 
-::google::protobuf::internal::ExplicitlyConstructed<ImplicitWeakMessage>
+const char* ImplicitWeakMessage::_InternalParse(const char* ptr,
+                                                ParseContext* ctx) {
+  return ctx->AppendString(ptr, data_);
+}
+
+struct ImplicitWeakMessageDefaultType {
+  constexpr ImplicitWeakMessageDefaultType()
+      : instance(ConstantInitialized{}) {}
+  ~ImplicitWeakMessageDefaultType() {}
+  union {
+    ImplicitWeakMessage instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT ImplicitWeakMessageDefaultType
     implicit_weak_message_default_instance;
 
-bool ImplicitWeakMessage::MergePartialFromCodedStream(io::CodedInputStream* input) {
-  io::StringOutputStream string_stream(&data_);
-  io::CodedOutputStream coded_stream(&string_stream, false);
-  return WireFormatLite::SkipMessage(input, &coded_stream);
+const ImplicitWeakMessage* ImplicitWeakMessage::default_instance() {
+  return reinterpret_cast<ImplicitWeakMessage*>(
+      &implicit_weak_message_default_instance);
 }
 
 }  // namespace internal
 }  // namespace protobuf
 }  // namespace google
+
+#include <google/protobuf/port_undef.inc>
