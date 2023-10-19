@@ -1,32 +1,9 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 package com.google.protobuf;
 
@@ -39,6 +16,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 /**
  * A class which represents an arbitrary set of fields of some message type. This is used to
@@ -123,6 +101,12 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
     if (isImmutable) {
       return;
     }
+    for (int i = 0; i < fields.getNumArrayEntries(); ++i) {
+      Entry<T, Object> entry = fields.getArrayEntryAt(i);
+      if (entry.getValue() instanceof GeneratedMessageLite) {
+        ((GeneratedMessageLite<?, ?>) entry.getValue()).makeImmutable();
+      }
+    }
     fields.makeImmutable();
     isImmutable = true;
   }
@@ -177,7 +161,6 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
     clone.hasLazyField = hasLazyField;
     return clone;
   }
-
 
   // =================================================================
 
@@ -567,7 +550,6 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
     }
   }
 
-
   /** See {@link Message#writeTo(CodedOutputStream)}. */
   public void writeTo(final CodedOutputStream output) throws IOException {
     for (int i = 0; i < fields.getNumArrayEntries(); i++) {
@@ -597,9 +579,11 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
         && !descriptor.isPacked()) {
       Object value = entry.getValue();
       if (value instanceof LazyField) {
-        value = ((LazyField) value).getValue();
+        ByteString valueBytes = ((LazyField) value).toByteString();
+        output.writeRawMessageSetExtension(entry.getKey().getNumber(), valueBytes);
+      } else {
+        output.writeMessageSetExtension(entry.getKey().getNumber(), (MessageLite) value);
       }
-      output.writeMessageSetExtension(entry.getKey().getNumber(), (MessageLite) value);
     } else {
       writeField(descriptor, entry.getValue(), output);
     }
@@ -721,6 +705,10 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
     if (descriptor.isRepeated()) {
       final List<?> valueList = (List<?>) value;
       if (descriptor.isPacked()) {
+        if (valueList.isEmpty()) {
+          // The tag should not be written for empty packed fields.
+          return;
+        }
         output.writeTag(number, WireFormat.WIRETYPE_LENGTH_DELIMITED);
         // Compute the total data size so the length can be written.
         int dataSize = 0;
@@ -886,9 +874,13 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
     WireFormat.FieldType type = descriptor.getLiteType();
     int number = descriptor.getNumber();
     if (descriptor.isRepeated()) {
+      List<?> valueList = (List<?>) value;
       if (descriptor.isPacked()) {
+        if (valueList.isEmpty()) {
+          return 0;
+        }
         int dataSize = 0;
-        for (final Object element : (List<?>) value) {
+        for (final Object element : valueList) {
           dataSize += computeElementSizeNoTag(type, element);
         }
         return dataSize
@@ -896,7 +888,7 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
             + CodedOutputStream.computeUInt32SizeNoTag(dataSize);
       } else {
         int size = 0;
-        for (final Object element : (List<?>) value) {
+        for (final Object element : valueList) {
           size += computeElementSize(type, number, element);
         }
         return size;
@@ -926,8 +918,27 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
       this.isMutable = true;
     }
 
-    /** Creates the FieldSet */
+    /**
+     * Creates the FieldSet
+     *
+     * @throws UninitializedMessageException if a message field is missing required fields.
+     */
     public FieldSet<T> build() {
+      return buildImpl(false);
+    }
+
+    /** Creates the FieldSet but does not validate that all required fields are present. */
+    public FieldSet<T> buildPartial() {
+      return buildImpl(true);
+    }
+
+    /**
+     * Creates the FieldSet.
+     *
+     * @param partial controls whether to do a build() or buildPartial() when converting submessage
+     *     builders to messages.
+     */
+    private FieldSet<T> buildImpl(boolean partial) {
       if (fields.isEmpty()) {
         return FieldSet.emptySet();
       }
@@ -936,7 +947,7 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
       if (hasNestedBuilders) {
         // Make a copy of the fields map with all Builders replaced by Message.
         fieldsForBuild = cloneAllFieldsMap(fields, /* copyList */ false);
-        replaceBuilders(fieldsForBuild);
+        replaceBuilders(fieldsForBuild, partial);
       }
       FieldSet<T> fieldSet = new FieldSet<>(fieldsForBuild);
       fieldSet.hasLazyField = hasLazyField;
@@ -944,22 +955,22 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
     }
 
     private static <T extends FieldDescriptorLite<T>> void replaceBuilders(
-        SmallSortedMap<T, Object> fieldMap) {
+        SmallSortedMap<T, Object> fieldMap, boolean partial) {
       for (int i = 0; i < fieldMap.getNumArrayEntries(); i++) {
-        replaceBuilders(fieldMap.getArrayEntryAt(i));
+        replaceBuilders(fieldMap.getArrayEntryAt(i), partial);
       }
       for (Map.Entry<T, Object> entry : fieldMap.getOverflowEntries()) {
-        replaceBuilders(entry);
+        replaceBuilders(entry, partial);
       }
     }
 
     private static <T extends FieldDescriptorLite<T>> void replaceBuilders(
-        Map.Entry<T, Object> entry) {
-      entry.setValue(replaceBuilders(entry.getKey(), entry.getValue()));
+        Map.Entry<T, Object> entry, boolean partial) {
+      entry.setValue(replaceBuilders(entry.getKey(), entry.getValue(), partial));
     }
 
     private static <T extends FieldDescriptorLite<T>> Object replaceBuilders(
-        T descriptor, Object value) {
+        T descriptor, Object value, boolean partial) {
       if (value == null) {
         return value;
       }
@@ -974,7 +985,7 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
           List<Object> list = (List<Object>) value;
           for (int i = 0; i < list.size(); i++) {
             Object oldElement = list.get(i);
-            Object newElement = replaceBuilder(oldElement);
+            Object newElement = replaceBuilder(oldElement, partial);
             if (newElement != oldElement) {
               // If the list contains a Message.Builder, then make a copy of that list and then
               // modify the Message.Builder into a Message and return the new list. This way, the
@@ -988,14 +999,21 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
           }
           return list;
         } else {
-          return replaceBuilder(value);
+          return replaceBuilder(value, partial);
         }
       }
       return value;
     }
 
-    private static Object replaceBuilder(Object value) {
-      return (value instanceof MessageLite.Builder) ? ((MessageLite.Builder) value).build() : value;
+    private static Object replaceBuilder(Object value, boolean partial) {
+      if (!(value instanceof MessageLite.Builder)) {
+        return value;
+      }
+      MessageLite.Builder builder = (MessageLite.Builder) value;
+      if (partial) {
+        return builder.buildPartial();
+      }
+      return builder.build();
     }
 
     /** Returns a new Builder using the fields from {@code fieldSet}. */
@@ -1014,7 +1032,7 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
         if (fields.isImmutable()) {
           result.makeImmutable();
         } else {
-          replaceBuilders(result);
+          replaceBuilders(result, true);
         }
         return result;
       }
@@ -1037,7 +1055,7 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
      */
     public Object getField(final T descriptor) {
       Object value = getFieldAllowBuilders(descriptor);
-      return replaceBuilders(descriptor, value);
+      return replaceBuilders(descriptor, value, true);
     }
 
     /** Same as {@link #getField(F)}, but allow a {@link MessageLite.Builder} to be returned. */
@@ -1123,7 +1141,7 @@ final class FieldSet<T extends FieldSet.FieldDescriptorLite<T>> {
         ensureIsMutable();
       }
       Object value = getRepeatedFieldAllowBuilders(descriptor, index);
-      return replaceBuilder(value);
+      return replaceBuilder(value, true);
     }
 
     /**

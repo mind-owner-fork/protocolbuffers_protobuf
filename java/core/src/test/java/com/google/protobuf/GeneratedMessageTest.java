@@ -1,32 +1,9 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 package com.google.protobuf;
 
@@ -359,7 +336,7 @@ public class GeneratedMessageTest {
 
   @Test
   public void testParsedMessagesAreImmutable() throws Exception {
-    TestAllTypes value = TestAllTypes.parser().parseFrom(TestUtil.getAllSet().toByteString());
+    TestAllTypes value = TestAllTypes.parseFrom(TestUtil.getAllSet().toByteString());
     assertIsUnmodifiable(value.getRepeatedInt32List());
     assertIsUnmodifiable(value.getRepeatedInt64List());
     assertIsUnmodifiable(value.getRepeatedUint32List());
@@ -624,7 +601,7 @@ public class GeneratedMessageTest {
             // Create expected version passing foreign message instance explicitly.
             .setOptionalForeignMessage(ForeignMessage.newBuilder().setC(123).build())
             .build();
-    // TODO(ngd): Upgrade to using real #equals method once implemented
+    // TODO: Upgrade to using real #equals method once implemented
     assertThat(message.toString()).isEqualTo(expectedMessage.toString());
   }
 
@@ -800,7 +777,6 @@ public class GeneratedMessageTest {
     fieldBuilder.setField(field, expected);
     assertThat(fieldBuilder.build().getField(field)).isEqualTo(expected);
   }
-
 
   @Test
   public void testGetBuilderForNonMessageExtensionField() {
@@ -1498,7 +1474,7 @@ public class GeneratedMessageTest {
     assertThat(message.hasFooStringPiece()).isTrue();
     TestUtil.assertAtMostOneFieldSetOneof(message);
 
-    message = builder.setFooBytes(TestUtil.toBytes("qux")).buildPartial();
+    message = builder.setFooBytes(TestUtil.toBytes("moo")).buildPartial();
     assertThat(message.hasFooBytes()).isTrue();
     TestUtil.assertAtMostOneFieldSetOneof(message);
 
@@ -1508,7 +1484,7 @@ public class GeneratedMessageTest {
 
     message =
         builder
-            .setFooMessage(TestOneof2.NestedMessage.newBuilder().setQuxInt(234).build())
+            .setFooMessage(TestOneof2.NestedMessage.newBuilder().setMooInt(234).build())
             .buildPartial();
     assertThat(message.hasFooMessage()).isTrue();
     TestUtil.assertAtMostOneFieldSetOneof(message);
@@ -1529,7 +1505,7 @@ public class GeneratedMessageTest {
       assertThat(builder.getFooInt()).isEqualTo(123);
       TestOneof2 message = builder.buildPartial();
       assertThat(message.hasFooInt()).isTrue();
-      assertThat(123).isEqualTo(message.getFooInt());
+      assertThat(message.getFooInt()).isEqualTo(123);
 
       assertThat(builder.clearFooInt().hasFooInt()).isFalse();
       TestOneof2 message2 = builder.build();
@@ -1625,31 +1601,31 @@ public class GeneratedMessageTest {
     {
       // set
       TestOneof2.Builder builder = TestOneof2.newBuilder();
-      assertThat(builder.getFooMessage().getQuxInt()).isEqualTo(0);
-      builder.setFooMessage(TestOneof2.NestedMessage.newBuilder().setQuxInt(234).build());
+      assertThat(builder.getFooMessage().getMooInt()).isEqualTo(0);
+      builder.setFooMessage(TestOneof2.NestedMessage.newBuilder().setMooInt(234).build());
       assertThat(builder.hasFooMessage()).isTrue();
-      assertThat(builder.getFooMessage().getQuxInt()).isEqualTo(234);
+      assertThat(builder.getFooMessage().getMooInt()).isEqualTo(234);
       TestOneof2 message = builder.buildPartial();
       assertThat(message.hasFooMessage()).isTrue();
-      assertThat(message.getFooMessage().getQuxInt()).isEqualTo(234);
+      assertThat(message.getFooMessage().getMooInt()).isEqualTo(234);
 
       // clear
       assertThat(builder.clearFooMessage().hasFooString()).isFalse();
       message = builder.build();
       assertThat(message.hasFooMessage()).isFalse();
-      assertThat(message.getFooMessage().getQuxInt()).isEqualTo(0);
+      assertThat(message.getFooMessage().getMooInt()).isEqualTo(0);
 
       // nested builder
       builder = TestOneof2.newBuilder();
       assertThat(builder.getFooMessageOrBuilder())
           .isSameInstanceAs(TestOneof2.NestedMessage.getDefaultInstance());
       assertThat(builder.hasFooMessage()).isFalse();
-      builder.getFooMessageBuilder().setQuxInt(123);
+      builder.getFooMessageBuilder().setMooInt(123);
       assertThat(builder.hasFooMessage()).isTrue();
-      assertThat(builder.getFooMessage().getQuxInt()).isEqualTo(123);
+      assertThat(builder.getFooMessage().getMooInt()).isEqualTo(123);
       message = builder.build();
       assertThat(message.hasFooMessage()).isTrue();
-      assertThat(message.getFooMessage().getQuxInt()).isEqualTo(123);
+      assertThat(message.getFooMessage().getMooInt()).isEqualTo(123);
     }
 
     // LazyMessage is tested in LazyMessageLiteTest.java
@@ -1689,10 +1665,10 @@ public class GeneratedMessageTest {
   public void testOneofMergeMessage_mergeIntoNewBuilder() {
     TestOneof2.Builder builder = TestOneof2.newBuilder();
     TestOneof2 message =
-        builder.setFooMessage(TestOneof2.NestedMessage.newBuilder().setQuxInt(234).build()).build();
+        builder.setFooMessage(TestOneof2.NestedMessage.newBuilder().setMooInt(234).build()).build();
     TestOneof2 message2 = TestOneof2.newBuilder().mergeFrom(message).build();
     assertThat(message2.hasFooMessage()).isTrue();
-    assertThat(message2.getFooMessage().getQuxInt()).isEqualTo(234);
+    assertThat(message2.getFooMessage().getMooInt()).isEqualTo(234);
   }
 
   @Test
@@ -1755,12 +1731,12 @@ public class GeneratedMessageTest {
       TestOneof2.Builder builder = TestOneof2.newBuilder();
       TestOneof2 message =
           builder
-              .setFooMessage(TestOneof2.NestedMessage.newBuilder().setQuxInt(234).build())
+              .setFooMessage(TestOneof2.NestedMessage.newBuilder().setMooInt(234).build())
               .build();
       ByteString serialized = message.toByteString();
       TestOneof2 message2 = TestOneof2.parseFrom(serialized);
       assertThat(message2.hasFooMessage()).isTrue();
-      assertThat(message2.getFooMessage().getQuxInt()).isEqualTo(234);
+      assertThat(message2.getFooMessage().getMooInt()).isEqualTo(234);
     }
   }
 
@@ -1943,7 +1919,7 @@ public class GeneratedMessageTest {
 
   @Test
   public void
-  extendableBuilder_extensionFieldContainingBuilder_setRepeatedFieldOverwritesElement() {
+      extendableBuilder_extensionFieldContainingBuilder_setRepeatedFieldOverwritesElement() {
     TestAllExtensions.Builder builder = TestAllExtensions.newBuilder();
     builder.addRepeatedField(REPEATED_NESTED_MESSAGE_EXTENSION, NestedMessage.getDefaultInstance());
     // Calling getRepeatedFieldBuilder and ignoring the returned Builder should have no

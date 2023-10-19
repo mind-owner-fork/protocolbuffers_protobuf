@@ -1,36 +1,16 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 // Author: petar@google.com (Petar Petrov)
 
-#include <google/protobuf/pyext/descriptor.h>
+#include "google/protobuf/pyext/descriptor.h"
+
+#include "absl/log/absl_check.h"
+#include "google/protobuf/descriptor_legacy.h"
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -40,15 +20,15 @@
 #include <string>
 #include <unordered_map>
 
-#include <google/protobuf/io/coded_stream.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/dynamic_message.h>
-#include <google/protobuf/pyext/descriptor_containers.h>
-#include <google/protobuf/pyext/descriptor_pool.h>
-#include <google/protobuf/pyext/message.h>
-#include <google/protobuf/pyext/message_factory.h>
-#include <google/protobuf/pyext/scoped_pyobject_ptr.h>
-#include <google/protobuf/stubs/hash.h>
+#include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/dynamic_message.h"
+#include "google/protobuf/pyext/descriptor_containers.h"
+#include "google/protobuf/pyext/descriptor_pool.h"
+#include "google/protobuf/pyext/message.h"
+#include "google/protobuf/pyext/message_factory.h"
+#include "google/protobuf/pyext/scoped_pyobject_ptr.h"
+#include "absl/strings/string_view.h"
+#include "google/protobuf/io/coded_stream.h"
 
 #define PyString_AsStringAndSize(ob, charpp, sizep)              \
   (PyUnicode_Check(ob)                                           \
@@ -57,6 +37,37 @@
               ? -1                                               \
               : 0)                                               \
        : PyBytes_AsStringAndSize(ob, (charpp), (sizep)))
+
+#if PY_VERSION_HEX < 0x030900B1 && !defined(PYPY_VERSION)
+static PyCodeObject* PyFrame_GetCode(PyFrameObject *frame)
+{
+    Py_INCREF(frame->f_code);
+    return frame->f_code;
+}
+
+static PyFrameObject* PyFrame_GetBack(PyFrameObject *frame)
+{
+    Py_XINCREF(frame->f_back);
+    return frame->f_back;
+}
+#endif
+
+#if PY_VERSION_HEX < 0x030B00A7 && !defined(PYPY_VERSION)
+static PyObject* PyFrame_GetLocals(PyFrameObject *frame)
+{
+    if (PyFrame_FastToLocalsWithError(frame) < 0) {
+        return NULL;
+    }
+    Py_INCREF(frame->f_locals);
+    return frame->f_locals;
+}
+
+static PyObject* PyFrame_GetGlobals(PyFrameObject *frame)
+{
+    Py_INCREF(frame->f_globals);
+    return frame->f_globals;
+}
+#endif
 
 namespace google {
 namespace protobuf {
@@ -89,55 +100,75 @@ PyObject* PyString_FromCppString(const std::string& str) {
 //
 // From user code, descriptors still look immutable.
 //
-// TODO(amauryfa): Change the proto2 compiler to remove the assignments, and
+// TODO: Change the proto2 compiler to remove the assignments, and
 // remove this hack.
 bool _CalledFromGeneratedFile(int stacklevel) {
-#ifndef PYPY_VERSION
+#ifdef PYPY_VERSION
+  return true;
+#else
   // This check is not critical and is somewhat difficult to implement correctly
   // in PyPy.
   PyFrameObject* frame = PyEval_GetFrame();
+  PyCodeObject* frame_code = nullptr;
+  PyObject* frame_globals = nullptr;
+  PyObject* frame_locals = nullptr;
+  bool result = false;
+
   if (frame == nullptr) {
-    return false;
+    goto exit;
   }
+  Py_INCREF(frame);
   while (stacklevel-- > 0) {
-    frame = frame->f_back;
+    PyFrameObject* next_frame = PyFrame_GetBack(frame);
+    Py_DECREF(frame);
+    frame = next_frame;
     if (frame == nullptr) {
-      return false;
+      goto exit;
     }
   }
 
-  if (frame->f_code->co_filename == nullptr) {
-    return false;
+  frame_code = PyFrame_GetCode(frame);
+  if (frame_code->co_filename == nullptr) {
+    goto exit;
   }
   char* filename;
   Py_ssize_t filename_size;
-  if (PyString_AsStringAndSize(frame->f_code->co_filename,
+  if (PyString_AsStringAndSize(frame_code->co_filename,
                                &filename, &filename_size) < 0) {
     // filename is not a string.
     PyErr_Clear();
-    return false;
+    goto exit;
   }
   if ((filename_size < 3) ||
       (strcmp(&filename[filename_size - 3], ".py") != 0)) {
     // Cython's stack does not have .py file name and is not at global module
     // scope.
-    return true;
+    result = true;
+    goto exit;
   }
   if (filename_size < 7) {
     // filename is too short.
-    return false;
+    goto exit;
   }
   if (strcmp(&filename[filename_size - 7], "_pb2.py") != 0) {
     // Filename is not ending with _pb2.
-    return false;
+    goto exit;
   }
 
-  if (frame->f_globals != frame->f_locals) {
+  frame_globals = PyFrame_GetGlobals(frame);
+  frame_locals = PyFrame_GetLocals(frame);
+  if (frame_globals != frame_locals) {
     // Not at global module scope
-    return false;
+    goto exit;
   }
+  result = true;
+exit:
+  Py_XDECREF(frame_globals);
+  Py_XDECREF(frame_locals);
+  Py_XDECREF(frame_code);
+  Py_XDECREF(frame);
+  return result;
 #endif
-  return true;
 }
 
 // If the calling code is not a _pb2.py file, raise AttributeError.
@@ -355,7 +386,7 @@ PyObject* NewInternedDescriptor(PyTypeObject* type,
   std::unordered_map<const void*, PyObject*>::iterator it =
       interned_descriptors->find(descriptor);
   if (it != interned_descriptors->end()) {
-    GOOGLE_DCHECK(Py_TYPE(it->second) == type);
+    ABSL_DCHECK(Py_TYPE(it->second) == type);
     Py_INCREF(it->second);
     return it->second;
   }
@@ -490,6 +521,12 @@ static PyObject* GetConcreteClass(PyBaseDescriptor* self, void *closure) {
       GetDescriptorPool_FromPool(
           _GetDescriptor(self)->file()->pool())->py_message_factory,
       _GetDescriptor(self)));
+
+  if (concrete_class == nullptr) {
+    PyErr_Clear();
+    return nullptr;
+  }
+
   Py_XINCREF(concrete_class);
   return concrete_class->AsPyObject();
 }
@@ -561,8 +598,8 @@ static PyObject* GetExtensionRanges(PyBaseDescriptor *self, void *closure) {
 
   for (int i = 0; i < descriptor->extension_range_count(); i++) {
     const Descriptor::ExtensionRange* range = descriptor->extension_range(i);
-    PyObject* start = PyLong_FromLong(range->start);
-    PyObject* end = PyLong_FromLong(range->end);
+    PyObject* start = PyLong_FromLong(range->start_number());
+    PyObject* end = PyLong_FromLong(range->end_number());
     PyList_SetItem(range_list, i, PyTuple_Pack(2, start, end));
   }
 
@@ -635,8 +672,9 @@ static PyObject* EnumValueName(PyBaseDescriptor *self, PyObject *args) {
 }
 
 static PyObject* GetSyntax(PyBaseDescriptor *self, void *closure) {
-  return PyUnicode_InternFromString(
-      FileDescriptor::SyntaxName(_GetDescriptor(self)->file()->syntax()));
+  std::string syntax(FileDescriptorLegacy::SyntaxName(
+      FileDescriptorLegacy(_GetDescriptor(self)->file()).syntax()));
+  return PyUnicode_InternFromString(syntax.c_str());
 }
 
 static PyGetSetDef Getters[] = {
@@ -1127,6 +1165,11 @@ static PyObject* GetHasOptions(PyBaseDescriptor *self, void *closure) {
     Py_RETURN_FALSE;
   }
 }
+
+static PyObject* GetIsClosed(PyBaseDescriptor* self, void* closure) {
+  return PyBool_FromLong(_GetDescriptor(self)->is_closed());
+}
+
 static int SetHasOptions(PyBaseDescriptor *self, PyObject *value,
                          void *closure) {
   return CheckCalledFromGeneratedFile("has_options");
@@ -1170,6 +1213,7 @@ static PyGetSetDef Getters[] = {
      "Containing type"},
     {"has_options", (getter)GetHasOptions, (setter)SetHasOptions,
      "Has Options"},
+    {"is_closed", (getter)GetIsClosed, nullptr, "If the enum is closed"},
     {"_options", (getter) nullptr, (setter)SetOptions, "Options"},
     {"_serialized_options", (getter) nullptr, (setter)SetSerializedOptions,
      "Serialized Options"},
@@ -1449,8 +1493,9 @@ static int SetSerializedOptions(PyFileDescriptor *self, PyObject *value,
 }
 
 static PyObject* GetSyntax(PyFileDescriptor *self, void *closure) {
-  return PyUnicode_InternFromString(
-      FileDescriptor::SyntaxName(_GetDescriptor(self)->syntax()));
+  std::string syntax(FileDescriptorLegacy::SyntaxName(
+      FileDescriptorLegacy(_GetDescriptor(self)).syntax()));
+  return PyUnicode_InternFromString(syntax.c_str());
 }
 
 static PyObject* CopyToProto(PyFileDescriptor *self, PyObject *target) {
@@ -1558,7 +1603,7 @@ PyObject* PyFileDescriptor_FromDescriptorWithSerializedPb(
     Py_XINCREF(serialized_pb);
     cfile_descriptor->serialized_pb = serialized_pb;
   }
-  // TODO(amauryfa): In the case of a cached object, check that serialized_pb
+  // TODO: In the case of a cached object, check that serialized_pb
   // is the same as before.
 
   return py_descriptor;
@@ -1741,7 +1786,8 @@ static PyObject* FindMethodByName(PyBaseDescriptor *self, PyObject* arg) {
   }
 
   const MethodDescriptor* method_descriptor =
-      _GetDescriptor(self)->FindMethodByName(StringParam(name, name_size));
+      _GetDescriptor(self)->FindMethodByName(
+          absl::string_view(name, name_size));
   if (method_descriptor == nullptr) {
     PyErr_Format(PyExc_KeyError, "Couldn't find method %.200s", name);
     return nullptr;

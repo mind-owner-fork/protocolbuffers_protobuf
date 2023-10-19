@@ -1,15 +1,21 @@
 #! /usr/bin/env python
+# Protocol Buffers - Google's data interchange format
+# Copyright 2008 Google Inc.  All rights reserved.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://developers.google.com/open-source/licenses/bsd
 #
 # See README for usage instructions.
 
 # pylint:disable=missing-module-docstring
 # pylint:disable=g-bad-import-order
-from distutils import util
 import fnmatch
 import glob
 import os
 import pkg_resources
 import re
+import shutil
 import subprocess
 import sys
 import sysconfig
@@ -17,28 +23,28 @@ import sysconfig
 # pylint:disable=g-importing-member
 # pylint:disable=g-multiple-import
 
-# We must use setuptools, not distutils, because we need to use the
-# namespace_packages option for the "google" package.
 from setuptools import setup, Extension, find_packages
 
-from distutils.command.build_ext import build_ext as _build_ext
-from distutils.command.build_py import build_py as _build_py
-from distutils.command.clean import clean as _clean
-from distutils.spawn import find_executable
+from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools.command.build_py import build_py as _build_py
 
 # Find the Protocol Compiler.
 if 'PROTOC' in os.environ and os.path.exists(os.environ['PROTOC']):
   protoc = os.environ['PROTOC']
-elif os.path.exists('../src/protoc'):
-  protoc = '../src/protoc'
-elif os.path.exists('../src/protoc.exe'):
-  protoc = '../src/protoc.exe'
+elif os.path.exists('../bazel-bin/protoc'):
+  protoc = '../bazel-bin/protoc'
+elif os.path.exists('../bazel-bin/protoc.exe'):
+  protoc = '../bazel-bin/protoc.exe'
+elif os.path.exists('../protoc'):
+  protoc = '../protoc'
+elif os.path.exists('../protoc.exe'):
+  protoc = '../protoc.exe'
 elif os.path.exists('../vsprojects/Debug/protoc.exe'):
   protoc = '../vsprojects/Debug/protoc.exe'
 elif os.path.exists('../vsprojects/Release/protoc.exe'):
   protoc = '../vsprojects/Release/protoc.exe'
 else:
-  protoc = find_executable('protoc')
+  protoc = shutil.which('protoc')
 
 
 def GetVersion():
@@ -98,7 +104,6 @@ def GenerateUnittestProtos():
   GenProto('../src/google/protobuf/map_unittest.proto', False)
   GenProto('../src/google/protobuf/test_messages_proto3.proto', False)
   GenProto('../src/google/protobuf/test_messages_proto2.proto', False)
-  GenProto('../src/google/protobuf/unittest_arena.proto', False)
   GenProto('../src/google/protobuf/unittest.proto', False)
   GenProto('../src/google/protobuf/unittest_custom_options.proto', False)
   GenProto('../src/google/protobuf/unittest_import.proto', False)
@@ -107,6 +112,7 @@ def GenerateUnittestProtos():
   GenProto('../src/google/protobuf/unittest_mset_wire_format.proto', False)
   GenProto('../src/google/protobuf/unittest_no_generic_services.proto', False)
   GenProto('../src/google/protobuf/unittest_proto3_arena.proto', False)
+  GenProto('../src/google/protobuf/unittest_retention.proto', False)
   GenProto('../src/google/protobuf/util/json_format.proto', False)
   GenProto('../src/google/protobuf/util/json_format_proto3.proto', False)
   GenProto('google/protobuf/internal/any_test.proto', False)
@@ -115,6 +121,11 @@ def GenerateUnittestProtos():
   GenProto('google/protobuf/internal/factory_test1.proto', False)
   GenProto('google/protobuf/internal/factory_test2.proto', False)
   GenProto('google/protobuf/internal/file_options_test.proto', False)
+  GenProto('google/protobuf/internal/import_test_package/import_public.proto',
+           False)
+  GenProto(
+      'google/protobuf/internal/import_test_package/import_public_nested.proto',
+      False)
   GenProto('google/protobuf/internal/import_test_package/inner.proto', False)
   GenProto('google/protobuf/internal/import_test_package/outer.proto', False)
   GenProto('google/protobuf/internal/missing_enum_values.proto', False)
@@ -127,21 +138,6 @@ def GenerateUnittestProtos():
   GenProto('google/protobuf/internal/test_bad_identifiers.proto', False)
   GenProto('google/protobuf/internal/test_proto3_optional.proto', False)
   GenProto('google/protobuf/pyext/python.proto', False)
-
-
-class CleanCmd(_clean):
-  """Custom clean command for building the protobuf extension."""
-
-  def run(self):
-    # Delete generated files in the code tree.
-    for (dirpath, unused_dirnames, filenames) in os.walk('.'):
-      for filename in filenames:
-        filepath = os.path.join(dirpath, filename)
-        if (filepath.endswith('_pb2.py') or filepath.endswith('.pyc') or
-            filepath.endswith('.so') or filepath.endswith('.o')):
-          os.remove(filepath)
-    # _clean is an old-style class, so super() doesn't work.
-    _clean.run(self)
 
 
 class BuildPyCmd(_build_py):
@@ -198,13 +194,13 @@ class BuildExtCmd(_build_ext):
 
 
 class TestConformanceCmd(_build_py):
-  target = 'test_python'
+  target = '//python:conformance_test'
 
   def run(self):
     # Python 2.6 dodges these extra failures.
     os.environ['CONFORMANCE_PYTHON_EXTRA_FAILURES'] = (
         '--failure_list failure_list_python-post26.txt')
-    cmd = 'cd ../conformance && make %s' % (TestConformanceCmd.target)
+    cmd = 'bazel test %s' % (TestConformanceCmd.target,)
     subprocess.check_call(cmd, shell=True)
 
 
@@ -215,6 +211,59 @@ def GetOptionFromArgv(option_str):
   return False
 
 
+def _GetFlagValues(flag_long, flag_short):
+  """Searches sys.argv for setuptools-style flags and yields values."""
+
+  expect_value = flag_long.endswith('=')
+  flag_res = [re.compile(r'--?%s(=(.*))?' %
+                         (flag_long[:-1] if expect_value else flag_long))]
+  if flag_short:
+    flag_res.append(re.compile(r'-%s(.*)?' % (flag_short,)))
+
+  flag_match = None
+  for arg in sys.argv:
+    # If the last arg was like '-O', check if this is the library we want.
+    if flag_match is not None:
+      yield arg
+      flag_match = None
+      continue
+
+    for flag_re in flag_res:
+      m = flag_re.match(arg)
+      if m is None:
+        continue
+      if not expect_value:
+        yield arg
+        continue
+      groups = m.groups()
+      # Check for matches:
+      #   --long-name=foo => ('=foo', 'foo')
+      #   -Xfoo => ('foo')
+      # N.B.: if the flag is like '--long-name=', then there is a value
+      # (the empty string).
+      if groups[0] or groups[-1]:
+        yield groups[-1]
+        continue
+      flag_match = m
+
+  return False
+
+
+def HasStaticLibprotobufOpt():
+  """Returns true if there is a --link-objects arg for libprotobuf."""
+
+  lib_re = re.compile(r'(.*[/\\])?(lib)?protobuf([.]pic)?[.](a|lib)')
+  for value in _GetFlagValues('link-objects=', 'O'):
+    if lib_re.match(value):
+      return True
+  return False
+
+
+def HasLibraryDirsOpt():
+  """Returns true if there is a --library-dirs arg."""
+  return any(_GetFlagValues('library-dirs=', 'L'))
+
+
 if __name__ == '__main__':
   ext_module_list = []
   warnings_as_errors = '--warnings_as_errors'
@@ -222,14 +271,39 @@ if __name__ == '__main__':
     # Link libprotobuf.a and libprotobuf-lite.a statically with the
     # extension. Note that those libraries have to be compiled with
     # -fPIC for this to work.
-    compile_static_ext = GetOptionFromArgv('--compile_static_extension')
-    libraries = ['protobuf']
+    compile_static_ext = HasStaticLibprotobufOpt()
+    if GetOptionFromArgv('--compile_static_extension'):
+      # FUTURE: add a warning and deprecate --compile_static_extension.
+      compile_static_ext = True
     extra_objects = None
     if compile_static_ext:
       libraries = None
-      extra_objects = ['../src/.libs/libprotobuf.a',
-                       '../src/.libs/libprotobuf-lite.a']
-    TestConformanceCmd.target = 'test_python_cpp'
+      library_dirs = None
+      if not HasStaticLibprotobufOpt():
+        if os.path.exists('../bazel-bin/src/google/protobuf/libprotobuf.a'):
+          extra_objects = ['../bazel-bin/src/google/protobuf/libprotobuf.a']
+        else:
+          extra_objects = ['../libprotobuf.a']
+          extra_objects += list(
+              glob.iglob('../third_party/utf8_range/*.a'))
+          # Repeat all of these enough times to eliminate order-dependence.
+          extra_objects += list(
+              glob.iglob('../third_party/abseil-cpp/absl/**/*.a'))
+          extra_objects += list(
+              glob.iglob('../third_party/abseil-cpp/absl/**/*.a'))
+          extra_objects += list(
+              glob.iglob('../third_party/abseil-cpp/absl/**/*.a'))
+    else:
+      libraries = ['protobuf']
+      if HasLibraryDirsOpt():
+        library_dirs = None
+      elif os.path.exists('../bazel-bin/src/google/protobuf/libprotobuf.a'):
+        library_dirs = ['../bazel-bin/src/google/protobuf']
+      else:
+        library_dirs = ['..']
+
+    TestConformanceCmd.target = ('//python:conformance_test_cpp '
+                                 '--define=use_fast_cpp_protos=true')
 
     extra_compile_args = []
 
@@ -254,7 +328,7 @@ if __name__ == '__main__':
       extra_compile_args.append('-Wno-invalid-offsetof')
       extra_compile_args.append('-Wno-sign-compare')
       extra_compile_args.append('-Wno-unused-variable')
-      extra_compile_args.append('-std=c++11')
+      extra_compile_args.append('-std=c++14')
 
     if sys.platform == 'darwin':
       extra_compile_args.append('-Wno-shorten-64-to-32')
@@ -269,8 +343,10 @@ if __name__ == '__main__':
                          pkg_resources.parse_version('10.9.0')):
         os.environ['MACOSX_DEPLOYMENT_TARGET'] = '10.9'
         os.environ['_PYTHON_HOST_PLATFORM'] = re.sub(
-            r'macosx-[0-9]+\.[0-9]+-(.+)', r'macosx-10.9-\1',
-            util.get_platform())
+            r'macosx-[0-9]+\.[0-9]+-(.+)',
+            r'macosx-10.9-\1',
+            sysconfig.get_platform(),
+        )
 
     # https://github.com/Theano/Theano/issues/4926
     if sys.platform == 'win32':
@@ -296,11 +372,11 @@ if __name__ == '__main__':
         Extension(
             'google.protobuf.pyext._message',
             glob.glob('google/protobuf/pyext/*.cc'),
-            include_dirs=['.', '../src'],
+            include_dirs=['.', '../src', '../third_party/abseil-cpp'],
             libraries=libraries,
             extra_objects=extra_objects,
             extra_link_args=message_extra_link_args,
-            library_dirs=['../src/.libs'],
+            library_dirs=library_dirs,
             extra_compile_args=extra_compile_args,
         ),
         Extension(
@@ -323,31 +399,37 @@ if __name__ == '__main__':
       download_url='https://github.com/protocolbuffers/protobuf/releases',
       long_description="Protocol Buffers are Google's data interchange format",
       url='https://developers.google.com/protocol-buffers/',
+      project_urls={
+          'Source': 'https://github.com/protocolbuffers/protobuf',
+      },
       maintainer='protobuf@googlegroups.com',
       maintainer_email='protobuf@googlegroups.com',
       license='BSD-3-Clause',
       classifiers=[
           'Programming Language :: Python',
           'Programming Language :: Python :: 3',
-          'Programming Language :: Python :: 3.7',
+          # LINT.IfChange
+          # Remove importlib fallback path when we drop Python 3.8 support.
           'Programming Language :: Python :: 3.8',
+          # LINT.ThenChange(//depot/google3/google/protobuf/internal/test_util.py)
           'Programming Language :: Python :: 3.9',
           'Programming Language :: Python :: 3.10',
+          'Programming Language :: Python :: 3.11',
       ],
       namespace_packages=['google'],
       packages=find_packages(
           exclude=[
               'import_test_package',
               'protobuf_distutils',
-          ],),
+          ],
+      ),
       test_suite='google.protobuf.internal',
       cmdclass={
-          'clean': CleanCmd,
           'build_py': BuildPyCmd,
           'build_ext': BuildExtCmd,
           'test_conformance': TestConformanceCmd,
       },
       install_requires=install_requires,
       ext_modules=ext_module_list,
-      python_requires='>=3.7',
+      python_requires='>=3.8',
   )

@@ -1,32 +1,9 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2014 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 #include <ctype.h>
 #include <errno.h>
@@ -73,6 +50,8 @@ static VALUE rb_str_maybe_null(const char* s) {
 // -----------------------------------------------------------------------------
 
 typedef struct {
+  // IMPORTANT: WB_PROTECTED objects must only use the RB_OBJ_WRITE()
+  // macro to update VALUE references, as to trigger write barriers.
   VALUE def_to_descriptor;  // Hash table of def* -> Ruby descriptor.
   upb_DefPool* symtab;
 } DescriptorPool;
@@ -97,7 +76,7 @@ static void DescriptorPool_free(void* _self) {
 static const rb_data_type_t DescriptorPool_type = {
     "Google::Protobuf::DescriptorPool",
     {DescriptorPool_mark, DescriptorPool_free, NULL},
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY | RUBY_TYPED_WB_PROTECTED,
 };
 
 static DescriptorPool* ruby_to_DescriptorPool(VALUE val) {
@@ -125,11 +104,9 @@ static VALUE DescriptorPool_alloc(VALUE klass) {
   self->def_to_descriptor = Qnil;
   ret = TypedData_Wrap_Struct(klass, &DescriptorPool_type, self);
 
-  self->def_to_descriptor = rb_hash_new();
+  RB_OBJ_WRITE(ret, &self->def_to_descriptor, rb_hash_new());
   self->symtab = upb_DefPool_New();
-  ObjectCache_Add(self->symtab, ret);
-
-  return ret;
+  return ObjectCache_TryAdd(self->symtab, ret);
 }
 
 /*
@@ -159,6 +136,7 @@ VALUE DescriptorPool_add_serialized_file(VALUE _self,
     rb_raise(cTypeError, "Unable to build file to DescriptorPool: %s",
              upb_Status_ErrorMessage(&status));
   }
+  RB_GC_GUARD(arena_rb);
   return get_filedef_obj(_self, filedef);
 }
 
@@ -222,6 +200,8 @@ static void DescriptorPool_register(VALUE module) {
 
 typedef struct {
   const upb_MessageDef* msgdef;
+  // IMPORTANT: WB_PROTECTED objects must only use the RB_OBJ_WRITE()
+  // macro to update VALUE references, as to trigger write barriers.
   VALUE klass;
   VALUE descriptor_pool;
 } Descriptor;
@@ -237,7 +217,7 @@ static void Descriptor_mark(void* _self) {
 static const rb_data_type_t Descriptor_type = {
     "Google::Protobuf::Descriptor",
     {Descriptor_mark, RUBY_DEFAULT_FREE, NULL},
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY | RUBY_TYPED_WB_PROTECTED,
 };
 
 static Descriptor* ruby_to_Descriptor(VALUE val) {
@@ -279,7 +259,7 @@ static VALUE Descriptor_initialize(VALUE _self, VALUE cookie,
              "Descriptor objects may not be created from Ruby.");
   }
 
-  self->descriptor_pool = descriptor_pool;
+  RB_OBJ_WRITE(_self, &self->descriptor_pool, descriptor_pool);
   self->msgdef = (const upb_MessageDef*)NUM2ULL(ptr);
 
   return Qnil;
@@ -389,7 +369,7 @@ static VALUE Descriptor_lookup_oneof(VALUE _self, VALUE name) {
 static VALUE Descriptor_msgclass(VALUE _self) {
   Descriptor* self = ruby_to_Descriptor(_self);
   if (self->klass == Qnil) {
-    self->klass = build_class_from_descriptor(_self);
+    RB_OBJ_WRITE(_self, &self->klass, build_class_from_descriptor(_self));
   }
   return self->klass;
 }
@@ -416,6 +396,8 @@ static void Descriptor_register(VALUE module) {
 
 typedef struct {
   const upb_FileDef* filedef;
+  // IMPORTANT: WB_PROTECTED objects must only use the RB_OBJ_WRITE()
+  // macro to update VALUE references, as to trigger write barriers.
   VALUE descriptor_pool;  // Owns the upb_FileDef.
 } FileDescriptor;
 
@@ -429,7 +411,7 @@ static void FileDescriptor_mark(void* _self) {
 static const rb_data_type_t FileDescriptor_type = {
     "Google::Protobuf::FileDescriptor",
     {FileDescriptor_mark, RUBY_DEFAULT_FREE, NULL},
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY | RUBY_TYPED_WB_PROTECTED,
 };
 
 static FileDescriptor* ruby_to_FileDescriptor(VALUE val) {
@@ -462,7 +444,7 @@ static VALUE FileDescriptor_initialize(VALUE _self, VALUE cookie,
              "Descriptor objects may not be created from Ruby.");
   }
 
-  self->descriptor_pool = descriptor_pool;
+  RB_OBJ_WRITE(_self, &self->descriptor_pool, descriptor_pool);
   self->filedef = (const upb_FileDef*)NUM2ULL(ptr);
 
   return Qnil;
@@ -518,6 +500,8 @@ static void FileDescriptor_register(VALUE module) {
 
 typedef struct {
   const upb_FieldDef* fielddef;
+  // IMPORTANT: WB_PROTECTED objects must only use the RB_OBJ_WRITE()
+  // macro to update VALUE references, as to trigger write barriers.
   VALUE descriptor_pool;  // Owns the upb_FieldDef.
 } FieldDescriptor;
 
@@ -531,7 +515,7 @@ static void FieldDescriptor_mark(void* _self) {
 static const rb_data_type_t FieldDescriptor_type = {
     "Google::Protobuf::FieldDescriptor",
     {FieldDescriptor_mark, RUBY_DEFAULT_FREE, NULL},
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY | RUBY_TYPED_WB_PROTECTED,
 };
 
 static FieldDescriptor* ruby_to_FieldDescriptor(VALUE val) {
@@ -569,7 +553,7 @@ static VALUE FieldDescriptor_initialize(VALUE _self, VALUE cookie,
              "Descriptor objects may not be created from Ruby.");
   }
 
-  self->descriptor_pool = descriptor_pool;
+  RB_OBJ_WRITE(_self, &self->descriptor_pool, descriptor_pool);
   self->fielddef = (const upb_FieldDef*)NUM2ULL(ptr);
 
   return Qnil;
@@ -594,7 +578,7 @@ upb_CType ruby_to_fieldtype(VALUE type) {
 
 #define CONVERT(upb, ruby)                \
   if (SYM2ID(type) == rb_intern(#ruby)) { \
-    return kUpb_CType_##upb;                \
+    return kUpb_CType_##upb;              \
   }
 
   CONVERT(Float, float);
@@ -617,7 +601,7 @@ upb_CType ruby_to_fieldtype(VALUE type) {
 
 static VALUE descriptortype_to_ruby(upb_FieldType type) {
   switch (type) {
-#define CONVERT(upb, ruby)        \
+#define CONVERT(upb, ruby)   \
   case kUpb_FieldType_##upb: \
     return ID2SYM(rb_intern(#ruby));
     CONVERT(Float, float);
@@ -702,7 +686,7 @@ static VALUE FieldDescriptor_label(VALUE _self) {
   FieldDescriptor* self = ruby_to_FieldDescriptor(_self);
   switch (upb_FieldDef_Label(self->fielddef)) {
 #define CONVERT(upb, ruby) \
-  case kUpb_Label_##upb:    \
+  case kUpb_Label_##upb:   \
     return ID2SYM(rb_intern(#ruby));
 
     CONVERT(Optional, optional);
@@ -810,7 +794,7 @@ static VALUE FieldDescriptor_has(VALUE _self, VALUE msg_rb) {
     rb_raise(rb_eArgError, "does not track presence");
   }
 
-  return upb_Message_Has(msg, self->fielddef) ? Qtrue : Qfalse;
+  return upb_Message_HasFieldByDef(msg, self->fielddef) ? Qtrue : Qfalse;
 }
 
 /*
@@ -828,7 +812,7 @@ static VALUE FieldDescriptor_clear(VALUE _self, VALUE msg_rb) {
     rb_raise(cTypeError, "has method called on wrong message type");
   }
 
-  upb_Message_ClearField(msg, self->fielddef);
+  upb_Message_ClearFieldByDef(msg, self->fielddef);
   return Qnil;
 }
 
@@ -853,7 +837,7 @@ static VALUE FieldDescriptor_set(VALUE _self, VALUE msg_rb, VALUE value) {
 
   msgval = Convert_RubyToUpb(value, upb_FieldDef_Name(self->fielddef),
                              TypeInfo_get(self->fielddef), arena);
-  upb_Message_Set(msg, self->fielddef, msgval, arena);
+  upb_Message_SetFieldByDef(msg, self->fielddef, msgval, arena);
   return Qnil;
 }
 
@@ -883,6 +867,8 @@ static void FieldDescriptor_register(VALUE module) {
 
 typedef struct {
   const upb_OneofDef* oneofdef;
+  // IMPORTANT: WB_PROTECTED objects must only use the RB_OBJ_WRITE()
+  // macro to update VALUE references, as to trigger write barriers.
   VALUE descriptor_pool;  // Owns the upb_OneofDef.
 } OneofDescriptor;
 
@@ -896,7 +882,7 @@ static void OneofDescriptor_mark(void* _self) {
 static const rb_data_type_t OneofDescriptor_type = {
     "Google::Protobuf::OneofDescriptor",
     {OneofDescriptor_mark, RUBY_DEFAULT_FREE, NULL},
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY | RUBY_TYPED_WB_PROTECTED,
 };
 
 static OneofDescriptor* ruby_to_OneofDescriptor(VALUE val) {
@@ -935,7 +921,7 @@ static VALUE OneofDescriptor_initialize(VALUE _self, VALUE cookie,
              "Descriptor objects may not be created from Ruby.");
   }
 
-  self->descriptor_pool = descriptor_pool;
+  RB_OBJ_WRITE(_self, &self->descriptor_pool, descriptor_pool);
   self->oneofdef = (const upb_OneofDef*)NUM2ULL(ptr);
 
   return Qnil;
@@ -987,6 +973,8 @@ static void OneofDescriptor_register(VALUE module) {
 
 typedef struct {
   const upb_EnumDef* enumdef;
+  // IMPORTANT: WB_PROTECTED objects must only use the RB_OBJ_WRITE()
+  // macro to update VALUE references, as to trigger write barriers.
   VALUE module;           // begins as nil
   VALUE descriptor_pool;  // Owns the upb_EnumDef.
 } EnumDescriptor;
@@ -1002,7 +990,7 @@ static void EnumDescriptor_mark(void* _self) {
 static const rb_data_type_t EnumDescriptor_type = {
     "Google::Protobuf::EnumDescriptor",
     {EnumDescriptor_mark, RUBY_DEFAULT_FREE, NULL},
-    .flags = RUBY_TYPED_FREE_IMMEDIATELY,
+    .flags = RUBY_TYPED_FREE_IMMEDIATELY | RUBY_TYPED_WB_PROTECTED,
 };
 
 static EnumDescriptor* ruby_to_EnumDescriptor(VALUE val) {
@@ -1041,7 +1029,7 @@ static VALUE EnumDescriptor_initialize(VALUE _self, VALUE cookie,
              "Descriptor objects may not be created from Ruby.");
   }
 
-  self->descriptor_pool = descriptor_pool;
+  RB_OBJ_WRITE(_self, &self->descriptor_pool, descriptor_pool);
   self->enumdef = (const upb_EnumDef*)NUM2ULL(ptr);
 
   return Qnil;
@@ -1080,7 +1068,7 @@ static VALUE EnumDescriptor_name(VALUE _self) {
 static VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name) {
   EnumDescriptor* self = ruby_to_EnumDescriptor(_self);
   const char* name_str = rb_id2name(SYM2ID(name));
-  const upb_EnumValueDef *ev =
+  const upb_EnumValueDef* ev =
       upb_EnumDef_FindValueByName(self->enumdef, name_str);
   if (ev) {
     return INT2NUM(upb_EnumValueDef_Number(ev));
@@ -1099,7 +1087,8 @@ static VALUE EnumDescriptor_lookup_name(VALUE _self, VALUE name) {
 static VALUE EnumDescriptor_lookup_value(VALUE _self, VALUE number) {
   EnumDescriptor* self = ruby_to_EnumDescriptor(_self);
   int32_t val = NUM2INT(number);
-  const upb_EnumValueDef* ev = upb_EnumDef_FindValueByNumber(self->enumdef, val);
+  const upb_EnumValueDef* ev =
+      upb_EnumDef_FindValueByNumber(self->enumdef, val);
   if (ev) {
     return ID2SYM(rb_intern(upb_EnumValueDef_Name(ev)));
   } else {
@@ -1137,7 +1126,7 @@ static VALUE EnumDescriptor_each(VALUE _self) {
 static VALUE EnumDescriptor_enummodule(VALUE _self) {
   EnumDescriptor* self = ruby_to_EnumDescriptor(_self);
   if (self->module == Qnil) {
-    self->module = build_module_from_enumdesc(_self);
+    RB_OBJ_WRITE(_self, &self->module, build_module_from_enumdesc(_self));
   }
   return self->module;
 }

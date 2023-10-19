@@ -1,57 +1,36 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 // Author: tgs@google.com (Tom Szymanski)
 //
 // Test reflection methods for aggregate access to Repeated[Ptr]Fields.
 // This test proto2 methods on a proto2 layout.
 
-#include <google/protobuf/stubs/casts.h>
-#include <google/protobuf/test_util.h>
-#include <google/protobuf/unittest.pb.h>
-#include <google/protobuf/dynamic_message.h>
-#include <google/protobuf/reflection.h>
 #include <gtest/gtest.h>
+#include "absl/base/casts.h"
+#include "absl/strings/cord.h"
+#include "google/protobuf/dynamic_message.h"
+#include "google/protobuf/port.h"
+#include "google/protobuf/reflection.h"
+#include "google/protobuf/test_util.h"
+#include "google/protobuf/unittest.pb.h"
 
 namespace google {
 namespace protobuf {
+namespace {
 
+using internal::DownCast;
 using unittest::ForeignMessage;
 using unittest::TestAllExtensions;
 using unittest::TestAllTypes;
 
-namespace {
-
 static int Func(int i, int j) { return i * j; }
 
-static std::string StrFunc(int i, int j) { return StrCat(Func(i, 4)); }
+static std::string StrFunc(int i, int j) { return absl::StrCat(Func(i, 4)); }
 
 TEST(RepeatedFieldReflectionTest, RegularFields) {
   TestAllTypes message;
@@ -113,7 +92,7 @@ TEST(RepeatedFieldReflectionTest, RegularFields) {
     EXPECT_EQ(rf_double.Get(i), Func(i, 2));
     EXPECT_EQ(rpf_string.Get(i), StrFunc(i, 5));
     EXPECT_EQ(rpf_foreign_message.Get(i).c(), Func(i, 6));
-    EXPECT_EQ(down_cast<const ForeignMessage*>(&rpf_message.Get(i))->c(),
+    EXPECT_EQ(DownCast<const ForeignMessage*>(&rpf_message.Get(i))->c(),
               Func(i, 6));
 
     // Check gets through mutable objects.
@@ -121,7 +100,7 @@ TEST(RepeatedFieldReflectionTest, RegularFields) {
     EXPECT_EQ(mrf_double->Get(i), Func(i, 2));
     EXPECT_EQ(mrpf_string->Get(i), StrFunc(i, 5));
     EXPECT_EQ(mrpf_foreign_message->Get(i).c(), Func(i, 6));
-    EXPECT_EQ(down_cast<const ForeignMessage*>(&mrpf_message->Get(i))->c(),
+    EXPECT_EQ(DownCast<const ForeignMessage*>(&mrpf_message->Get(i))->c(),
               Func(i, 6));
 
     // Check sets through mutable objects.
@@ -133,11 +112,11 @@ TEST(RepeatedFieldReflectionTest, RegularFields) {
     EXPECT_EQ(message.repeated_double(i), Func(i, -2));
     EXPECT_EQ(message.repeated_string(i), StrFunc(i, -5));
     EXPECT_EQ(message.repeated_foreign_message(i).c(), Func(i, -6));
-    down_cast<ForeignMessage*>(mrpf_message->Mutable(i))->set_c(Func(i, 7));
+    DownCast<ForeignMessage*>(mrpf_message->Mutable(i))->set_c(Func(i, 7));
     EXPECT_EQ(message.repeated_foreign_message(i).c(), Func(i, 7));
   }
 
-#ifdef PROTOBUF_HAS_DEATH_TEST
+#if GTEST_HAS_DEATH_TEST
   // Make sure types are checked correctly at runtime.
   const FieldDescriptor* fd_optional_int32 =
       desc->FindFieldByName("optional_int32");
@@ -148,7 +127,7 @@ TEST(RepeatedFieldReflectionTest, RegularFields) {
   EXPECT_DEATH(refl->GetRepeatedPtrField<TestAllTypes>(
                    message, fd_repeated_foreign_message),
                "wrong submessage type");
-#endif  // PROTOBUF_HAS_DEATH_TEST
+#endif  // GTEST_HAS_DEATH_TEST
 }
 
 
@@ -164,7 +143,7 @@ TEST(RepeatedFieldReflectionTest, ExtensionFields) {
 
   const FieldDescriptor* fd_repeated_int64_extension =
       desc->file()->FindExtensionByName("repeated_int64_extension");
-  GOOGLE_CHECK(fd_repeated_int64_extension != nullptr);
+  ABSL_CHECK(fd_repeated_int64_extension != nullptr);
 
   const RepeatedField<int64_t>& rf_int64_extension =
       refl->GetRepeatedField<int64_t>(extended_message,
@@ -293,7 +272,7 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForRegularFields) {
     ForeignMessage scratch_space;
     EXPECT_EQ(rf_foreign_message.Get(i, &scratch_space).c(), Func(i, 6));
     EXPECT_EQ(
-        down_cast<const ForeignMessage&>(rf_message.Get(i, &scratch_space)).c(),
+        DownCast<const ForeignMessage&>(rf_message.Get(i, &scratch_space)).c(),
         Func(i, 6));
 
     // Check gets through mutable objects.
@@ -302,8 +281,7 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForRegularFields) {
     EXPECT_EQ(mrf_string.Get(i), StrFunc(i, 5));
     EXPECT_EQ(mrf_foreign_message.Get(i, &scratch_space).c(), Func(i, 6));
     EXPECT_EQ(
-        down_cast<const ForeignMessage&>(mrf_message.Get(i, &scratch_space))
-            .c(),
+        DownCast<const ForeignMessage&>(mrf_message.Get(i, &scratch_space)).c(),
         Func(i, 6));
 
     // Check sets through mutable objects.
@@ -361,6 +339,12 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForRegularFields) {
     EXPECT_EQ(message.repeated_foreign_message(index).c(), new_it->c());
   }
   EXPECT_EQ(10, index);
+
+  // Test MutableRepeatedFieldRef::Reserve()
+  mrf_int32.Reserve(mrf_int32.size() + 1);
+  mrf_double.Reserve(mrf_double.size() + 1);
+  mrf_string.Reserve(mrf_string.size() + 1);
+  mrf_foreign_message.Reserve(mrf_foreign_message.size() + 1);
 
   // Test MutableRepeatedFieldRef::Add()
   mrf_int32.Add(1234);
@@ -420,7 +404,7 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForRegularFields) {
   EXPECT_TRUE(rf_message.empty());
   EXPECT_TRUE(mrf_message.empty());
 
-#ifdef PROTOBUF_HAS_DEATH_TEST
+#if GTEST_HAS_DEATH_TEST
 
   // Make sure types are checked correctly at runtime.
   const FieldDescriptor* fd_optional_int32 =
@@ -433,7 +417,7 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForRegularFields) {
                    message, fd_repeated_foreign_message),
                "");
 
-#endif  // PROTOBUF_HAS_DEATH_TEST
+#endif  // GTEST_HAS_DEATH_TEST
 }
 
 TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForEnums) {
@@ -538,7 +522,7 @@ TEST(RepeatedFieldReflectionTest, RepeatedFieldRefForExtensionFields) {
 
   const FieldDescriptor* fd_repeated_int64_extension =
       desc->file()->FindExtensionByName("repeated_int64_extension");
-  GOOGLE_CHECK(fd_repeated_int64_extension != nullptr);
+  ABSL_CHECK(fd_repeated_int64_extension != nullptr);
 
   const RepeatedFieldRef<int64_t> rf_int64_extension =
       refl->GetRepeatedFieldRef<int64_t>(extended_message,

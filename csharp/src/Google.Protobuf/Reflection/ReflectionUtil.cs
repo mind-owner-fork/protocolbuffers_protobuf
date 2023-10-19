@@ -1,39 +1,17 @@
 #region Copyright notice and license
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 #endregion
 
-using Google.Protobuf.Compatibility;
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using Google.Protobuf.Compatibility;
 
 namespace Google.Protobuf.Reflection
 {
@@ -117,6 +95,7 @@ namespace Google.Protobuf.Reflection
             GetReflectionHelper(method.DeclaringType, method.ReturnType).CreateFuncIMessageBool(method);
 
         [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Type parameter members are preserved with DynamicallyAccessedMembers on GeneratedClrTypeInfo.ctor clrType parameter.")]
+        [UnconditionalSuppressMessage("AotAnalysis", "IL3050:RequiresDynamicCode", Justification = "Type definition is explicitly specified and type argument is always a message type.")]
         internal static Func<IMessage, bool> CreateIsInitializedCaller([DynamicallyAccessedMembers(GeneratedClrTypeInfo.MessageAccessibility)]Type msg) =>
             ((IExtensionSetReflector)Activator.CreateInstance(typeof(ExtensionSetReflector<>).MakeGenericType(msg))).CreateIsInitializedCaller();
 
@@ -125,8 +104,22 @@ namespace Google.Protobuf.Reflection
         /// the type that declares the method, and the second argument to the first parameter type of the method.
         /// </summary>
         [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Type parameter members are preserved with DynamicallyAccessedMembers on GeneratedClrTypeInfo.ctor clrType parameter.")]
-        internal static IExtensionReflectionHelper CreateExtensionHelper(Extension extension) =>
-            (IExtensionReflectionHelper)Activator.CreateInstance(typeof(ExtensionReflectionHelper<,>).MakeGenericType(extension.TargetType, extension.GetType().GenericTypeArguments[1]), extension);
+        internal static IExtensionReflectionHelper CreateExtensionHelper(Extension extension)
+        {
+#if NET5_0_OR_GREATER
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+            {
+                // Using extensions with reflection is not supported with AOT.
+                // This helper is created when descriptors are populated. Delay throwing error until an app
+                // uses IFieldAccessor with an extension field.
+                return new AotExtensionReflectionHelper();
+            }
+#endif
+
+            var t1 = extension.TargetType;
+            var t3 = extension.GetType().GenericTypeArguments[1];
+            return (IExtensionReflectionHelper) Activator.CreateInstance(typeof(ExtensionReflectionHelper<,>).MakeGenericType(t1, t3), extension);
+        }
 
         /// <summary>
         /// Creates a reflection helper for the given type arguments. Currently these are created on demand
@@ -135,8 +128,17 @@ namespace Google.Protobuf.Reflection
         /// an object is pretty cheap.
         /// </summary>
         [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Type parameter members are preserved with DynamicallyAccessedMembers on GeneratedClrTypeInfo.ctor clrType parameter.")]
-        private static IReflectionHelper GetReflectionHelper(Type t1, Type t2) =>
-            (IReflectionHelper) Activator.CreateInstance(typeof(ReflectionHelper<,>).MakeGenericType(t1, t2));
+        private static IReflectionHelper GetReflectionHelper(Type t1, Type t2)
+        {
+#if NET5_0_OR_GREATER
+            if (!RuntimeFeature.IsDynamicCodeSupported)
+            {
+                return new AotReflectionHelper();
+            }
+#endif
+
+            return (IReflectionHelper) Activator.CreateInstance(typeof(ReflectionHelper<,>).MakeGenericType(t1, t2));
+        }
 
         // Non-generic interface allowing us to use an instance of ReflectionHelper<T1, T2> without statically
         // knowing the types involved.
@@ -162,9 +164,8 @@ namespace Google.Protobuf.Reflection
             Func<IMessage, bool> CreateIsInitializedCaller();
         }
 
-        private class ReflectionHelper<T1, T2> : IReflectionHelper
+        private sealed class ReflectionHelper<T1, T2> : IReflectionHelper
         {
-
             public Func<IMessage, int> CreateFuncIMessageInt32(MethodInfo method)
             {
                 // On pleasant runtimes, we can create a Func<int> from a method returning
@@ -209,7 +210,7 @@ namespace Google.Protobuf.Reflection
             }
         }
 
-        private class ExtensionReflectionHelper<T1, T3> : IExtensionReflectionHelper
+        private sealed class ExtensionReflectionHelper<T1, T3> : IExtensionReflectionHelper
             where T1 : IExtendableMessage<T1>
         {
             private readonly Extension extension;
@@ -221,20 +222,18 @@ namespace Google.Protobuf.Reflection
 
             public object GetExtension(IMessage message)
             {
-                if (!(message is T1))
+                if (message is not T1 extensionMessage)
                 {
                     throw new InvalidCastException("Cannot access extension on message that isn't IExtensionMessage");
                 }
 
-                T1 extensionMessage = (T1)message;
-
-                if (extension is Extension<T1, T3>)
+                if (extension is Extension<T1, T3> ext13)
                 {
-                    return extensionMessage.GetExtension(extension as Extension<T1, T3>);
+                    return extensionMessage.GetExtension(ext13);
                 }
-                else if (extension is RepeatedExtension<T1, T3>)
+                else if (extension is RepeatedExtension<T1, T3> repeatedExt13)
                 {
-                    return extensionMessage.GetOrInitializeExtension(extension as RepeatedExtension<T1, T3>);
+                    return extensionMessage.GetOrInitializeExtension(repeatedExt13);
                 }
                 else
                 {
@@ -244,16 +243,14 @@ namespace Google.Protobuf.Reflection
 
             public bool HasExtension(IMessage message)
             {
-                if (!(message is T1))
+                if (message is not T1 extensionMessage)
                 {
                     throw new InvalidCastException("Cannot access extension on message that isn't IExtensionMessage");
                 }
 
-                T1 extensionMessage = (T1)message;
-
-                if (extension is Extension<T1, T3>)
+                if (extension is Extension<T1, T3> ext13)
                 {
-                    return extensionMessage.HasExtension(extension as Extension<T1, T3>);
+                    return extensionMessage.HasExtension(ext13);
                 }
                 else if (extension is RepeatedExtension<T1, T3>)
                 {
@@ -267,16 +264,14 @@ namespace Google.Protobuf.Reflection
 
             public void SetExtension(IMessage message, object value)
             {
-                if (!(message is T1))
+                if (message is not T1 extensionMessage)
                 {
                     throw new InvalidCastException("Cannot access extension on message that isn't IExtensionMessage");
                 }
 
-                T1 extensionMessage = (T1)message;
-
-                if (extension is Extension<T1, T3>)
+                if (extension is Extension<T1, T3> ext13)
                 {
-                    extensionMessage.SetExtension(extension as Extension<T1, T3>, (T3)value);
+                    extensionMessage.SetExtension(ext13, (T3)value);
                 }
                 else if (extension is RepeatedExtension<T1, T3>)
                 {
@@ -290,20 +285,18 @@ namespace Google.Protobuf.Reflection
 
             public void ClearExtension(IMessage message)
             {
-                if (!(message is T1))
+                if (message is not T1 extensionMessage)
                 {
                     throw new InvalidCastException("Cannot access extension on message that isn't IExtensionMessage");
                 }
 
-                T1 extensionMessage = (T1)message;
-
-                if (extension is Extension<T1, T3>)
+                if (extension is Extension<T1, T3> ext13)
                 {
-                    extensionMessage.ClearExtension(extension as Extension<T1, T3>);
+                    extensionMessage.ClearExtension(ext13);
                 }
-                else if (extension is RepeatedExtension<T1, T3>)
+                else if (extension is RepeatedExtension<T1, T3> repeatedExt13)
                 {
-                    extensionMessage.GetExtension(extension as RepeatedExtension<T1, T3>).Clear();
+                    extensionMessage.GetExtension(repeatedExt13).Clear();
                 }
                 else
                 {
@@ -312,7 +305,39 @@ namespace Google.Protobuf.Reflection
             }
         }
 
-        private class ExtensionSetReflector<
+#if NET5_0_OR_GREATER
+        /// <summary>
+        /// This helper is compatible with .NET Native AOT.
+        /// MakeGenericType doesn't work when a type argument is a value type in AOT.
+        /// MethodInfo.Invoke is used instead of compiled expressions because it's faster in AOT.
+        /// </summary>
+        private sealed class AotReflectionHelper : IReflectionHelper
+        {
+            private static readonly object[] EmptyObjectArray = new object[0];
+            public Action<IMessage> CreateActionIMessage(MethodInfo method) => message => method.Invoke(message, EmptyObjectArray);
+            public Action<IMessage, object> CreateActionIMessageObject(MethodInfo method) => (message, arg) => method.Invoke(message, new object[] { arg });
+            public Func<IMessage, bool> CreateFuncIMessageBool(MethodInfo method) => message => (bool) method.Invoke(message, EmptyObjectArray);
+            public Func<IMessage, int> CreateFuncIMessageInt32(MethodInfo method) => message => (int) method.Invoke(message, EmptyObjectArray);
+            public Func<IMessage, object> CreateFuncIMessageObject(MethodInfo method) => message => method.Invoke(message, EmptyObjectArray);
+        }
+
+        /// <summary>
+        /// Reflection with extensions isn't supported because IExtendableMessage members are used to get values.
+        /// Can't use reflection to invoke those methods because they have a generic argument.
+        /// MakeGenericMethod can't be used because it will break whenever the extension type is a value type.
+        /// This could be made to work if there were non-generic methods available for getting and setting extension values.
+        /// </summary>
+        private sealed class AotExtensionReflectionHelper : IExtensionReflectionHelper
+        {
+            private const string Message = "Extensions reflection is not supported with AOT.";
+            public object GetExtension(IMessage message) => throw new NotSupportedException(Message);
+            public bool HasExtension(IMessage message) => throw new NotSupportedException(Message);
+            public void SetExtension(IMessage message, object value) => throw new NotSupportedException(Message);
+            public void ClearExtension(IMessage message) => throw new NotSupportedException(Message);
+        }
+#endif
+
+        private sealed class ExtensionSetReflector<
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties)]
             T1> : IExtensionSetReflector where T1 : IExtendableMessage<T1>
         {

@@ -1,32 +1,9 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 package com.google.protobuf.util;
 
@@ -35,6 +12,7 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.FieldMask;
+import com.google.protobuf.GeneratedMessage;
 import com.google.protobuf.Message;
 import java.util.ArrayList;
 import java.util.List;
@@ -142,7 +120,7 @@ final class FieldMaskTree {
    *   <li>If all children of a node have been removed, the node itself will be removed as well.
    *       That is, if "foo" only has one child "bar" and "foo.bar" only has one child "baz",
    *       removing "foo.bar.barz" would remove both "foo" and "foo.bar". If "foo" has both "bar"
-   *       and "qux" as children, removing "foo.bar" would leave the path "foo.qux" intact.
+   *       and "moo" as children, removing "foo.bar" would leave the path "foo.moo" intact.
    *   <li>If the field path to remove is a non-exist sub-path, nothing will be changed.
    * </ul>
    */
@@ -292,7 +270,11 @@ final class FieldMaskTree {
           // so we don't create unnecessary empty messages.
           continue;
         }
-        Message.Builder childBuilder = ((Message) destination.getField(field)).toBuilder();
+        // This is a mess because of java proto API 1 still hanging around.
+        Message.Builder childBuilder =
+            destination instanceof GeneratedMessage.Builder
+                ? destination.getFieldBuilder(field)
+                : ((Message) destination.getField(field)).toBuilder();
         merge(entry.getValue(), (Message) source.getField(field), childBuilder, options);
         destination.setField(field, childBuilder.buildPartial());
         continue;

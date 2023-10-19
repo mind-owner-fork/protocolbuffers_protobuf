@@ -1,32 +1,9 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 package com.google.protobuf.util;
 
@@ -51,7 +28,6 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.google.protobuf.Descriptors.EnumValueDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
-import com.google.protobuf.Descriptors.FieldDescriptor.Type;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.DoubleValue;
@@ -295,9 +271,9 @@ public class JsonFormat {
 
 
     /**
-     * Create a new {@link Printer} that will omit all insignificant whitespace in the JSON output.
+     * Create a new {@link Printer} that omits insignificant whitespace in the JSON output.
      * This new Printer clones all other configurations from the current Printer. Insignificant
-     * whitespace is defined by the JSON spec as whitespace that appear between JSON structural
+     * whitespace is defined by the JSON spec as whitespace that appears between JSON structural
      * elements:
      *
      * <pre>
@@ -308,8 +284,7 @@ public class JsonFormat {
      * %x0D )              ; Carriage return
      * </pre>
      *
-     * See <a href="https://tools.ietf.org/html/rfc7159">https://tools.ietf.org/html/rfc7159</a>
-     * current {@link Printer}.
+     * See <a href="https://tools.ietf.org/html/rfc7159">https://tools.ietf.org/html/rfc7159</a>.
      */
     public Printer omittingInsignificantWhitespace() {
       return new Printer(
@@ -354,7 +329,7 @@ public class JsonFormat {
      * @throws IOException if writing to the output fails
      */
     public void appendTo(MessageOrBuilder message, Appendable output) throws IOException {
-      // TODO(xiaofeng): Investigate the allocation overhead and optimize for
+      // TODO: Investigate the allocation overhead and optimize for
       // mobile.
       new PrinterImpl(
               registry,
@@ -468,7 +443,7 @@ public class JsonFormat {
      *         proto3 format or there are unknown fields in the input.
      */
     public void merge(String json, Message.Builder builder) throws InvalidProtocolBufferException {
-      // TODO(xiaofeng): Investigate the allocation overhead and optimize for
+      // TODO: Investigate the allocation overhead and optimize for
       // mobile.
       new ParserImpl(registry, oldRegistry, ignoringUnknownFields, recursionLimit)
           .merge(json, builder);
@@ -482,7 +457,7 @@ public class JsonFormat {
      * @throws IOException if reading from the input throws
      */
     public void merge(Reader json, Message.Builder builder) throws IOException {
-      // TODO(xiaofeng): Investigate the allocation overhead and optimize for
+      // TODO: Investigate the allocation overhead and optimize for
       // mobile.
       new ParserImpl(registry, oldRegistry, ignoringUnknownFields, recursionLimit)
           .merge(json, builder);
@@ -534,7 +509,6 @@ public class JsonFormat {
     private TypeRegistry(Map<String, Descriptor> types) {
       this.types = types;
     }
-
 
     /** A Builder is used to build {@link TypeRegistry}. */
     public static class Builder {
@@ -968,7 +942,16 @@ public class JsonFormat {
         throw new InvalidProtocolBufferException("Invalid Value type.");
       }
       for (Map.Entry<FieldDescriptor, Object> entry : fields.entrySet()) {
-        printSingleFieldValue(entry.getKey(), entry.getValue());
+        FieldDescriptor field = entry.getKey();
+        if (field.getType() == FieldDescriptor.Type.DOUBLE) {
+          Double doubleValue = (Double) entry.getValue();
+          if (doubleValue.isNaN() || doubleValue.isInfinite()) {
+            throw new IllegalArgumentException(
+                "google.protobuf.Value cannot encode double values for "
+                + "infinity or nan, because they would be parsed as a string.");
+          }
+        }
+        printSingleFieldValue(field, entry.getValue());
       }
     }
 
@@ -1319,11 +1302,11 @@ public class JsonFormat {
         if (e.getCause() instanceof IOException) {
           throw (IOException) e.getCause();
         } else {
-          throw new InvalidProtocolBufferException(e.getMessage());
+          throw new InvalidProtocolBufferException(e.getMessage(), e);
         }
       } catch (RuntimeException e) {
         // We convert all exceptions from JSON parsing to our own exceptions.
-        throw new InvalidProtocolBufferException(e.getMessage());
+        throw new InvalidProtocolBufferException(e.getMessage(), e);
       }
     }
 
@@ -1685,7 +1668,7 @@ public class JsonFormat {
         Object key = parseFieldValue(keyField, new JsonPrimitive(entry.getKey()), entryBuilder);
         Object value = parseFieldValue(valueField, entry.getValue(), entryBuilder);
         if (value == null) {
-          if (ignoringUnknownFields && valueField.getType() == Type.ENUM) {
+          if (ignoringUnknownFields && valueField.getType() == FieldDescriptor.Type.ENUM) {
             continue;
           } else {
             throw new InvalidProtocolBufferException("Map value cannot be null.");
@@ -1719,13 +1702,14 @@ public class JsonFormat {
         FieldDescriptor field, JsonElement json, Message.Builder builder)
         throws InvalidProtocolBufferException {
       if (!(json instanceof JsonArray)) {
-        throw new InvalidProtocolBufferException("Expect an array but found: " + json);
+        throw new InvalidProtocolBufferException(
+            "Expected an array for " + field.getName() + " but found " + json);
       }
       JsonArray array = (JsonArray) json;
       for (int i = 0; i < array.size(); ++i) {
         Object value = parseFieldValue(field, array.get(i), builder);
         if (value == null) {
-          if (ignoringUnknownFields && field.getType() == Type.ENUM) {
+          if (ignoringUnknownFields && field.getType() == FieldDescriptor.Type.ENUM) {
             continue;
           } else {
             throw new InvalidProtocolBufferException(
@@ -1918,10 +1902,10 @@ public class JsonFormat {
         // Try to interpret the value as a number.
         try {
           int numericValue = parseInt32(json);
-          if (enumDescriptor.getFile().getSyntax() == FileDescriptor.Syntax.PROTO3) {
-            result = enumDescriptor.findValueByNumberCreatingIfUnknown(numericValue);
-          } else {
+          if (enumDescriptor.isClosed()) {
             result = enumDescriptor.findValueByNumber(numericValue);
+          } else {
+            result = enumDescriptor.findValueByNumberCreatingIfUnknown(numericValue);
           }
         } catch (InvalidProtocolBufferException e) {
           // Fall through. This exception is about invalid int32 value we get from parseInt32() but
